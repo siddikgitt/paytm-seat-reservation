@@ -13,6 +13,8 @@ import java.util.Random;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -57,11 +59,23 @@ public class Burst {
     static volatile boolean warmingUp = true;
     static final String RUN = Long.toString(System.currentTimeMillis() % 1_000_000_000L, 36);
 
-    static final HttpClient http = HttpClient.newBuilder()
-            .version(HttpClient.Version.HTTP_2)
-            .connectTimeout(Duration.ofSeconds(strict ? 120 : 20))
-            .executor(Executors.newVirtualThreadPerTaskExecutor())
-            .build();
+    // A single JDK HTTP/2 connection fails immediately when the peer's stream limit is reached.
+    // Keep at most 64 requests per client, with enough total slots for the entire burst + probes.
+    static class Clients {
+        static final BlockingQueue<HttpClient> slots = create();
+        static BlockingQueue<HttpClient> create() {
+            int count = (concurrency + 63) / 64 + 1;
+            var executor = Executors.newVirtualThreadPerTaskExecutor();
+            var clients = new ArrayList<HttpClient>();
+            for (int i = 0; i < count; i++) clients.add(HttpClient.newBuilder()
+                    .version(HttpClient.Version.HTTP_2)
+                    .connectTimeout(Duration.ofSeconds(strict ? 120 : 20))
+                    .executor(executor).build());
+            var queue = new ArrayBlockingQueue<HttpClient>(count * 64);
+            for (int slot = 0; slot < 64; slot++) queue.addAll(clients);
+            return queue;
+        }
+    }
     static Semaphore inFlight;
     static final List<String> violations = Collections.synchronizedList(new ArrayList<>());
 
@@ -583,7 +597,13 @@ public class Burst {
                 }
                 if (token != null) b.header("Authorization", "Bearer " + token);
                 headers.forEach(b::header);
-                HttpResponse<String> resp = http.send(b.build(), HttpResponse.BodyHandlers.ofString());
+                HttpClient client = Clients.slots.take();
+                HttpResponse<String> resp;
+                try {
+                    resp = client.send(b.build(), HttpResponse.BodyHandlers.ofString());
+                } finally {
+                    Clients.slots.add(client);
+                }
                 protocols.computeIfAbsent(resp.version().name(), k -> new LongAdder()).increment();
                 long micros = (System.nanoTime() - start) / 1000;
                 String ct = resp.headers().firstValue("Content-Type").orElse("");
@@ -596,7 +616,9 @@ public class Burst {
                 if (limited) inFlight.release();
             }
         } catch (Exception e) {
-            return new Res(0, e.toString(), "transport:" + e.getClass().getSimpleName(), (System.nanoTime() - start) / 1000, false);
+            String detail = e instanceof java.io.IOException && "too many concurrent streams".equals(e.getMessage())
+                    ? ":too_many_concurrent_streams" : "";
+            return new Res(0, e.toString(), "transport:" + e.getClass().getSimpleName() + detail, (System.nanoTime() - start) / 1000, false);
         }
     }
 
