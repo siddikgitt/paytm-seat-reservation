@@ -4,6 +4,7 @@
 
     <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeContext>false</includeContext>
             <customFields>{"service":"${appName}"}</customFields>
             <fieldNames>
                 <timestamp>ts</timestamp>
