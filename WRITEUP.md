@@ -144,31 +144,21 @@ answered with one query on the request id the client got back.
 
 ## 6. AI usage (directed vs decided)
 
-This was an AI-led implementation. AI coding assistance produced the initial service, SQL design, tests,
-load generator, deployment configuration, and draft documentation. The existing project used Java 21,
-Spring Boot, PostgreSQL, and a Render blueprint. I am not claiming to have independently designed the locking
-or idempotency mechanism, or personally made every decision in the initial implementation.
+I used AI coding tools for the service implementation, SQL design, tests, load generator,
+deployment configuration and documentation. I directed the assignment scope, free-only
+hosting constraint, acceptance checks and subsequent debugging requests, and completed
+account onboarding and access approvals.
 
-For the completion pass I asked OpenAI Codex to compare the repository against the assignment, repair gaps,
-verify the running service, preserve incremental commits, and prepare the submission. I selected GitHub + Render,
-a free-only hosting budget, and an explicit AI-led disclosure.
-
-Codex identified a readiness failure caused by reading datasource properties instead of the active connection
-details, decimal-to-integer JSON coercion, and burst verification that could overlook missing or inconsistent metrics.
-It implemented focused fixes, database outage/recovery and numeric validation tests, and a strict burst mode that
-cannot hide 429s with retries. The retained results and deployment limitations are in VERIFICATION.md.
-
-AI also drafted the correctness explanation and operational recommendations in this document. These are design
-arguments to review against the code, not a claim that I implemented or verified them without assistance.
-The interview will require me to explain and extend this work; AI-generated documentation is not a substitute
-for that understanding. No unsupported performance result or personal design contribution is claimed here.
+The tools proposed and implemented the transaction/idempotency design and deployment
+changes, including the separate HTTP/2 gateway. They also diagnosed and fixed readiness
+connection handling, fractional numeric input validation, verifier gaps and restart DNS
+recovery. [VERIFICATION.md](VERIFICATION.md) records the tests, failed experiments and
+measured outcomes.
 
 ### Deployment investigation and measured result
 
-After Render's public load failures, I asked Codex to try alternative free hosting
-and completed the account onboarding, card verification and GitHub access steps.
-Codex tested Northflank, diagnosed the HTTP/2 buffer requirement, and designed the
-separate-proxy deployment. These were AI-led decisions and implementation work.
+Render's public load failures led to testing alternative free hosting. The HTTP/2
+buffer and memory measurements led to the separate-proxy deployment on Northflank.
 
 The final topology uses Northflank's two included free services: a dedicated
 HAProxy gateway and the Java application, each with 0.2 shared vCPU / 512 MB, plus
@@ -188,9 +178,9 @@ final state, client ledger and business counters reconciled. The measured peak
 outstanding client attempts was 19,999. The stampede took 123.865 seconds; this
 trades latency for bounded memory and is not a claim of 20,000 requests per second.
 
-The final restart check exposed a stale service address in HAProxy. Codex added
-runtime DNS resolution and configured the full private service hostname, then
-tested recovery with a changed application IP and an unchanged gateway.
+The final restart check exposed a stale service address in HAProxy. Runtime DNS
+resolution and the full private service hostname fixed recovery. The regression
+test changed the application IP while leaving the gateway running.
 
 The same work hardened Java's complete-response deadline after a partial body
 outlived the request timeout, and added safe gateway-response attribution.
