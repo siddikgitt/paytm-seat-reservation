@@ -1,14 +1,15 @@
 # Verification evidence
 
-Submission status: **not yet ready**. Public deployment, public burst runs, cold-start measurement,
-and a live-log recording remain pending. No local result establishes public capacity.
+Submission status: **not ready for HR**. The public service is deployed, but the strict capacity gate has not passed.
+No local result establishes public capacity.
 
 ## Application regression suite
 
 - Commit: `f69bded` (`fix: use active database for readiness and reject decimal money`).
 - Command: `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock ./mvnw -B test`
 - Environment: local Java 21.0.8, Docker/Colima, disposable PostgreSQL 16 Testcontainer.
-- Result: **12 tests passed, 0 failures, 0 errors**.
+- Result: **12 tests passed, 0 failures, 0 errors**. Re-run at application revision `a743ce1` also passed
+  ([final summary](evidence/final-app-tests-summary.txt)).
 - Includes hot-seat and overlapping multi-seat races, quotas, same-key races, spoofing,
   cancellation/rebooking, reconciliation, decimal rejection, and readiness during a paused database
   followed by recovery. Liveness remained healthy during the database outage.
@@ -17,20 +18,113 @@ and a live-log recording remain pending. No local result establishes public capa
 
 - Commit: `0e94a15` (`test: enforce burst reconciliation and strict concurrency grading`).
 - Command: `./test-burst.sh`
-- Result: **24 checks passed in normal mode and 24 in strict mode**.
+- Result: **24 checks passed in normal mode and 24 in strict mode**. Re-run with client `1e343f2` passed
+  ([final summary](evidence/final-verifier-tests-summary.txt)).
 - Negative cases include missing metrics, every required counter missing or inconsistent,
   gauge mismatch, invalid state responses, failed polls, invalid reserve responses, and strict 429 rejection.
 - Strict settings override attempts to lower concurrency or enable overload retries.
 - Every reservation attempt, including a 429 preceding a successful retry, remains counted.
 
-## Pending deployment evidence
+## Deployment
 
-- Public repository and clean-clone Docker build: pending.
-- Public Render URL and endpoint checks: pending.
-- Normal functional burst and strict 20,000-concurrency burst: pending.
-- Public cold-start recovery and persistence across restart: pending.
-- Database creation and expiry dates: pending provisioning.
-- Public live-log recording: pending.
+- Public repository: https://github.com/siddikgitt/paytm-seat-reservation (original incremental history preserved).
+- Service: https://seat-reservation-t3ml.onrender.com
+- Render web service: Free, Singapore; no paid upgrade.
+- Render database: Free PostgreSQL 18, provisioned October 5, 2026 (Asia/Kolkata).
+- Database expiry shown by Render: **November 4, 2026**.
+- Application revision used for the latest public runs: `a743ce1`; load-generator revision: `1e343f2`.
+  Later documentation-only commits do not change the tested application.
+- Fresh public checkout Docker builds passed at `d8b26cb` and `238f9ac`.
+- A clean clone at `1e343f2` also built and ran with unmodified Docker Compose; `/readyz` returned UP.
+  See [clean-checkout proof](evidence/clean-checkout-docker.txt).
+- `make test` passed all 12 application tests inside Docker.
+- All 12 application tests also passed against PostgreSQL 18 using
+  `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock ./mvnw -Dtest.postgres.image=postgres:18-alpine test`.
+- [Live-log recording](evidence/live-logs.mp4): 20 seconds, captured at one frame per second from the Render
+  live tail during public burst `2d8y30`. Contains synthetic users and no deployment secrets.
+- [Restart persistence proof](evidence/restart-persistence.txt): a committed reservation and its idempotency key
+  survived deployment from `d8b26cb` to `238f9ac`; replay returned the identical reservation with HTTP 200.
+
+## Retained load results
+
+- [Local functional burst](evidence/local-functional.txt), `d8b26cb`: PASS, 23,034 reservation attempts,
+  1,000 configured concurrency, zero 5xx/transport failures, metrics and state reconciled. Unconstrained local app.
+- [Initial public functional burst](evidence/live-functional-initial.txt), `d8b26cb`: FAIL overall.
+  All 23,034 reservation attempts completed without 5xx; seat state and business counters reconciled.
+  Token setup experienced **65 HTTP 502 responses**, which remain counted despite retries.
+- Initial strict local in-network run, `d8b26cb`: application was OOM-killed. The app had no container memory limit;
+  it competed for the VM's available memory. This is a failed capacity test, not a passing load result.
+- [Bounded local strict burst](evidence/local-strict-bounded.txt), `238f9ac`: FAIL, **93 transport errors**.
+  App limited to 512 MB and 0.5 CPU, client limited to 2 GB. App stayed running at approximately 376 MB;
+  final seat state, counters, and quotas reconciled. Peak client attempts outstanding: 17,842.
+  A common gate released 20,000 tasks; that does not mean all reached the server simultaneously.
+- The earlier strict run through the Mac port forwarder broke its forwarding connection; that run is not service
+  capacity evidence. The socket forwarding was restored without restarting unrelated containers.
+
+These failures led to a bounded connection count, an OS backlog, modest token setup concurrency, and complete
+failure reporting in the verifier. The 512-connection bound delayed health probes under normal load, so the final
+application uses 2,048 connections. A [local 512 MB / 0.5 CPU functional run](evidence/local-functional-2048.txt)
+passed with zero 5xx/transport errors and full reconciliation at that setting (about 425 MB resident memory).
+The HTTP/1.1 fallback also [passed locally](evidence/local-http1-fallback.txt).
+
+A first HTTP/2 public run using one client connection failed with 22,702 transport errors, while final state
+and business counters reconciled ([output](evidence/live-functional-single-http2.txt)). A focused warm-connection
+diagnostic reproduced `too many concurrent streams`: 400 of 500 concurrent requests failed before the server
+could process them. The pooled client at `1e343f2` passed that diagnostic with zero transport failures
+([diagnostic](evidence/http2-client-diagnostic.txt)). It allows 64 active requests per client connection and
+provides more total slots than the requested concurrency. It does not reduce the strict 20,000-attempt limit.
+Failed iterations are retained rather than relabeled as passing results.
+
+## Public acceptance gate and remaining checks
+
+- [Public strict burst](evidence/live-strict.txt), deployed `238f9ac`: **FAIL**.
+  23,034 reservation attempts across all phases: 731 confirmed, 49 replays, 4,005 seat-taken declines,
+  7 quota declines, 1 key-reuse decline, **6,181 HTTP 502 responses and 12,060 transport failures**.
+  Including state probes and setup, the run recorded 6,220 HTTP 502 responses (18,280 total 5xx/transport failures).
+  Peak outstanding client attempts was 16,370 after releasing 20,000 stampede tasks together.
+  Final API counts summed correctly (1,162 available + 838 confirmed = 2,000), but the client ledger accounted
+  for 832 confirmed seats and counter deltas did not reconcile. This is a failed acceptance test.
+- Render Events reported an HTTP health-check timeout after five seconds at approximately 01:29 Asia/Kolkata,
+  followed by service recovery. Counters reset during the run. No claim of zero errors or full reconciliation
+  is made for this deployment at strict load.
+- [Final public functional burst](evidence/live-functional-final.txt), app `a743ce1`, client `1e343f2`: **FAIL**.
+  Java 21.0.8 client on macOS, `JAVA_TOOL_OPTIONS=-Xmx2g ./burst.sh <live-url>`, default 1,000 in flight.
+  23,034 reservation attempts: 1,669 confirmations, 98 replays, 21,244 seat-taken declines, 21 quota declines,
+  1 key-reuse decline, **1 HTTP 502**, zero transport failures, zero 429s.
+  The run checked 129 live state snapshots. Final state: 154 available + 1,846 confirmed = 2,000;
+  the client ledger and every required business counter matched. Peak outstanding attempts: 1,001 including
+  a concurrent state probe. All 26,178 responses (including readiness) used HTTP/2.
+  This is not a passing submission because the zero-5xx requirement was violated.
+- [Final public strict burst](evidence/live-strict-final.txt), app `a743ce1`, client `1e343f2`: **FAIL**.
+  Java 21.0.8 on macOS, `JAVA_TOOL_OPTIONS=-Xmx2g STRICT=true ./burst.sh <live-url>`.
+  20,000 stampede tasks released together; retries disabled. Peak outstanding HTTP attempts: **20,001**
+  including a state probe. All 26,372 responses (including readiness) negotiated HTTP/2; zero client transport failures.
+  Across 23,034 reservation attempts: 60 confirmations, 21 replays, 2,994 seat-taken declines, 6 quota declines,
+  1 key-reuse decline, **9,553 HTTP 429 and 10,399 HTTP 502**. Including probes, 9,611 HTTP 429 occurred.
+  Final counts summed to 2,000 (1,919 available + 81 confirmed), but the client ledger covered only 69 seats.
+  Counters reset, state polls failed, and all required counter deltas failed reconciliation. No passing
+  zero-double-sale or full-reconciliation claim is made for this run.
+  A separate diagnostic saw an HTML Cloudflare challenge in an HTTP 429 response
+  ([edge observation](evidence/public-edge-challenge.txt)); this was not bypassed.
+  Render Events reported a five-second HTTP health-check timeout and recovery at 01:57 Asia/Kolkata
+  on October 5, 2026, during this run.
+  This deployed configuration does not meet the assignment's public capacity requirement. No paid upgrade was used.
+- [Cold-start recovery](evidence/cold-start-recovery.json): **PASS** on app `a743ce1`.
+  Render UI explicitly suspended the web service while retaining PostgreSQL; `/readyz` returned HTTP 503.
+  After clicking Resume, the first healthy readiness response arrived at **36.92 seconds**, and liveness was UP.
+  This measures explicit suspend/resume, not a timed 15-minute idle wake.
+- [Post-cold-start persistence](evidence/cold-start-persistence.txt): **PASS**. The original reservation,
+  amount, user, seats, and idempotency key survived; replay returned the identical HTTP 200 response with
+  `Idempotent-Replayed: true`. Counts remained one available and one confirmed out of two seats.
+
+## Submission decision
+
+**Do not submit as a completed assignment.** Code regressions, Docker startup, log evidence, restart persistence,
+and explicit cold-start recovery are verified. The free public deployment fails the required functional and
+strict load gates. The strict result cannot be replaced by the smaller local or functional runs.
+No paid resources or upgrade were authorized or used. The HR draft and generated admin credential are in the
+ignored local `private-submission/` directory; no email was sent.
+
 
 The previous README's claimed startup and throughput measurements had no retained evidence in this checkout
 and were removed rather than presented as verified results.

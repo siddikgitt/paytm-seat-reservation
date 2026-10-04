@@ -1,0 +1,1 @@
+PASS: original reservation and idempotency key persisted; show counts remain 1 available / 1 confirmed.

@@ -1,0 +1,7 @@
+Clean clone of committed revision: 1e343f257715b8f59fbe9f737e136957aae0bde7
+Command: docker compose -p paytm-final-clean -f <clean-checkout>/docker-compose.yml up --build -d
+Build and startup: PASS
+GET /readyz: HTTP 200
+{"status": "UP", "components": {"database": {"status": "UP", "details": {"latency_ms": 15}}, "readinessState": {"status": "UP"}}}
+PostgreSQL: postgres:16-alpine
+No source changes or configuration overrides in the clean checkout.

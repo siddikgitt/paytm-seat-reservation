@@ -1,0 +1,44 @@
+{
+  "method": "Explicit Render web-service suspension and resume; database retained. Not a timed 15-minute idle wake.",
+  "resume_unix_ms": 1791145881251,
+  "attempts": [
+    {
+      "elapsed_seconds": 9.59,
+      "error": "TimeoutError"
+    },
+    {
+      "elapsed_seconds": 16.63,
+      "error": "TimeoutError"
+    },
+    {
+      "elapsed_seconds": 23.67,
+      "error": "TimeoutError"
+    },
+    {
+      "elapsed_seconds": 30.7,
+      "error": "TimeoutError"
+    },
+    {
+      "elapsed_seconds": 36.92,
+      "status": 200
+    },
+    {
+      "result": "PASS",
+      "readiness": {
+        "status": "UP",
+        "components": {
+          "database": {
+            "status": "UP",
+            "details": {
+              "latency_ms": 206
+            }
+          },
+          "readinessState": {
+            "status": "UP"
+          }
+        }
+      },
+      "liveness": "UP"
+    }
+  ]
+}

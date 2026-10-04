@@ -77,7 +77,7 @@ frees the seats.
 
 ## 3. Holds and expiry
 
-I chose **immediate confirmation plus an explicit owner-only cancel**. The assignment's reserve response is
+The implementation uses **immediate confirmation plus an explicit owner-only cancel**. The assignment's reserve response is
 `status: "confirmed"`, and there is no payment step to wait on, so a TTL hold would add a state with no work
 behind it. The schema already has `status='held'`, and the API reports `held` counts, so adding holds later
 doesn't need a migration of the state model.
@@ -92,7 +92,7 @@ Cancel safety:
 - Cancel is idempotent (`status='cancelled'` returns `200` and does nothing), and it returns the quota in the same
   transaction.
 
-If I added TTL holds (the likely interview extension):
+A possible TTL-hold extension would work as follows:
 - `reserve` writes `status='held', held_until=now()+ttl`.
 - `POST /reservations/{id}/confirm` does
   `UPDATE ... WHERE reservation_id=:id AND status='held' AND held_until > now()`.
@@ -109,13 +109,14 @@ If I added TTL holds (the likely interview extension):
 This is a single Postgres primary and it is deliberately **CP**. Every grant goes through a row lock on the
 primary. Nothing that could grant a seat is cached, replicated asynchronously, or decided in memory: the only
 in-process caches are immutable show metadata and verified JWTs.
-- If the app loses the database, `/readyz` goes `503` within about 2s, the platform stops routing to the
-  instance, and writes fail with `503` and `Retry-After`. The app never "assumes available".
+- If the app loses the database, its independent readiness probe fails closed with `503` (the isolated test
+  checks within six seconds), and writes fail with `503` and `Retry-After`. Platform removal from routing
+  additionally depends on health-check frequency and thresholds. The app never "assumes available".
 - An idempotency key makes those client retries safe.
 - Under overload, the admission bulkhead sheds with `429` *before* any read or write. Selling is unavailable for
   the shed requests, which is the right trade for a system of record: a refused buyer can retry, but a double-sold
   seat requires a human apology.
-- I would accept availability loss for reads before consistency loss for writes. `GET /shows` could be served
+- The proposed tradeoff prioritizes write consistency over availability. `GET /shows` could be served
   from a replica or a short cache with a staleness bound, but reserve must always hit the primary.
 - Scaling out keeps this property: app instances are stateless, so N instances still serialise on the same rows.
   The counters are per-instance and Prometheus `sum()`s them. The seat gauges are read from the DB.
@@ -138,7 +139,7 @@ Ticket or dashboard (business hours):
 - Gap between `seats_confirmed_total` and the `show_seats{status="confirmed"}` gauge after restarts (expected,
   since counters reset), versus any gap between the gauge and `GET /shows` (unexpected).
 
-Every log line carries `request_id`, `user_id`, `show_id` and `outcome/reason`. "Why did my booking fail?" is
+Access logs carry `request_id` and, when applicable, `user_id`, `show_id` and `outcome/reason`. "Why did my booking fail?" is
 answered with one query on the request id the client got back.
 
 ## 6. AI usage (directed vs decided)
@@ -162,7 +163,21 @@ arguments to review against the code, not a claim that I implemented or verified
 The interview will require me to explain and extend this work; AI-generated documentation is not a substitute
 for that understanding. No unsupported performance result or personal design contribution is claimed here.
 
-## 7. What I'd do next
+### Observed free-tier limit
+
+The strict public test did not meet the assignment's acceptance bar. Render reported a five-second HTTP
+health-check timeout under the burst, and the run recorded gateway errors, transport failures, and counter
+resets. The database-backed final seat counts still added up, but that alone is not a passing result.
+The exact counts and client-ledger discrepancy are retained in VERIFICATION.md.
+
+The completion pass initially bounded Tomcat to 512 open connections to protect memory.
+That setting also delayed probes during the normal 1,000-in-flight run, so the final bound is 2,048; a local
+512 MB / 0.5 CPU full functional burst passed at that setting with about 425 MB resident usage. No OOM occurred in that functional test; this does not establish strict-load capacity. Additional connections queue upstream. The readiness database connection
+is independent of the pool; the HTTP request still shares the server's connector and CPU. A saturated connector
+can delay the platform's health probe even when Postgres is reachable. This is a remaining availability and
+capacity limitation, not something the idempotency key or SQL locks solve. No paid capacity was used.
+
+## 7. Possible extensions
 
 1. TTL holds with confirm and payment as described in section 3, including lazy expiry in the claim predicate and
    an expiry sweeper.

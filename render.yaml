@@ -3,7 +3,7 @@ services:
   - type: web
     name: seat-reservation
     runtime: docker
-    # "free" sleeps after 15 min idle and has ~0.1 CPU. Use "starter" (always on, 0.5 CPU) for the grading window.
+    # Free-only deployment; sleeps after 15 minutes idle. Capacity must pass the public burst gate.
     plan: free
     region: singapore
     dockerfilePath: ./Dockerfile

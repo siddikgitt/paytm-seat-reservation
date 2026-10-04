@@ -1,0 +1,3 @@
+PASS: reservation and idempotency key survived deployment from d8b26cb to 238f9ac.
+Replay returned HTTP 200, Idempotent-Replayed: true, and the identical original reservation.
+Show: c42b9576-9688-4b0d-aad6-90ec3441396e

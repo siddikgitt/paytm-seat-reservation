@@ -1,0 +1,13 @@
+Burst run=2d6fh5 target=http://app:8080 concurrency=20000 stampede=20000 hot_users=500 users=2000 hall=20x100
+strict=true retries_429=0
+waiting for http://app:8080/readyz (cold start allowed) ready
+show deaf8dd0-653c-4ab5-b6fc-8c8be5170a1d created with 2000 seats
+minting 3000 user tokens ...
+running Phase 1: hot-seat storm, 500 users -> A12 ...
+running Phase 2: 5 hot seats x 500 users ...
+running Phase 3: stampede 20000 reserves (10% duplicated retries) ...
+   invariant checked on 14 live snapshots during the stampede
+Exception in thread "main" java.lang.IllegalStateException: could not mint token for idem-2d6fh5
+	at Burst.token(Burst.java:444)
+	at Burst.main(Burst.java:233)
+time="2026-10-05T01:15:07+05:30" level=fatal msg="exit status 1"

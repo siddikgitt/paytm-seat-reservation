@@ -1,0 +1,6 @@
+Public target: https://seat-reservation-t3ml.onrender.com
+Application: a743ce1; JDK 21.0.8 macOS
+Diagnostic: warm one HTTP/2 connection, then issue 500 concurrent GET /livez calls.
+Before (client 4219665): {java.io.IOException: too many concurrent streams=400}
+After (client 1e343f2, pooled clients with 64 slots each): {} (zero transport failures)
+The full functional and strict bursts remain separate acceptance tests.

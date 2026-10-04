@@ -1,0 +1,110 @@
+Picked up JAVA_TOOL_OPTIONS: -Xmx2g
+Burst run=2e8j9h target=https://seat-reservation-t3ml.onrender.com concurrency=1000 stampede=20000 hot_users=500 users=2000 hall=20x100
+strict=false retries_429=5
+waiting for https://seat-reservation-t3ml.onrender.com/readyz (cold start allowed) ready
+show 0b115b86-2efb-4b0c-8b1d-3e4773a5f2ed created with 2000 seats
+minting 3000 user tokens ...
+running Phase 1: hot-seat storm, 500 users -> A12 ...
+running Phase 2: 5 hot seats x 500 users ...
+running Phase 3: stampede 20000 reserves (10% duplicated retries) ...
+   invariant checked on 3 live snapshots during the stampede
+running Phase 4: same idempotency key x20 in parallel ...
+running Phase 5: one user, 10 parallel reserves, limit 4 ...
+   greedy user ends with 4 seats (limit 4)
+
+================ OUTCOME DISTRIBUTION ================
+
+== Phase 1: hot-seat storm, 500 users -> A12  (500 requests in 2802 ms, 178 req/s)
+   201 confirmed                            1
+   409 seat_taken                          99
+   transport error transport:IOException     400
+   latency ms  p50=0.2  p95=2492.2  p99=2790.7  max=2799.2
+
+== Phase 2: 5 hot seats x 500 users  (2500 requests in 2603 ms, 960 req/s)
+   201 confirmed                            5
+   409 seat_taken                          95
+   transport error transport:IOException    2400
+   latency ms  p50=0.2  p95=4.4  p99=2486.9  max=2598.7
+
+== Phase 3: stampede 20000 reserves (10% duplicated retries)  (20000 requests in 4225 ms, 4734 req/s)
+   200 idempotent replay                    7
+   201 confirmed                           86
+   409 seat_taken                           7
+   transport error transport:IOException   19900
+   latency ms  p50=0.1  p95=17.0  p99=20.7  max=4219.3
+
+== Phase 4: same idempotency key x20 in parallel  (21 requests in 357 ms, 59 req/s)
+   200 idempotent replay                   19
+   201 confirmed                            1
+   409 idempotency_key_reused               1
+   latency ms  p50=259.2  p95=356.4  p99=356.9  max=356.9
+
+== Phase 5: one user, 10 parallel reserves, limit 4  (10 requests in 284 ms, 35 req/s)
+   201 confirmed                            4
+   409 per_user_limit                       6
+   latency ms  p50=192.1  p95=283.9  p99=283.9  max=283.9
+
+== Phase 6: spoofing, owner-only cancel, rebook  (6 requests in 0 ms, 0 req/s)
+   200 ok                                   2
+   201 confirmed                            3
+   404 not_found                            1
+   latency ms  p50=90.1  p95=100.1  p99=100.1  max=100.1
+
+== Cold-start readiness attempts (before burst)  (1 requests in 0 ms, 0 req/s)
+   200 ok                                   1
+   latency ms  p50=393.7  p95=393.7  p99=393.7  max=393.7
+
+== Every HTTP attempt after readiness (including setup, probes and retries)  (26053 requests in 0 ms, 0 req/s)
+   200 idempotent replay                   26
+   200 ok                                3015
+   201 confirmed                          101
+   404 not_found                            1
+   409 idempotency_key_reused               1
+   409 per_user_limit                       6
+   409 seat_taken                         201
+   transport error transport:IOException   22702
+   latency ms  p50=1.3  p95=83.2  p99=1687.9  max=4219.3
+
+== Every reservation HTTP attempt  (23034 requests in 0 ms, 0 req/s)
+   200 idempotent replay                   26
+   201 confirmed                          100
+   409 idempotency_key_reused               1
+   409 per_user_limit                       6
+   409 seat_taken                         201
+   transport error transport:IOException   22700
+   latency ms  p50=0.1  p95=17.2  p99=1802.5  max=4219.3
+Peak outstanding HTTP attempts: 791
+Negotiated response protocols: {HTTP_2=3352}
+
+== TOTAL
+   200 idempotent replay                   26
+   200 ok                                   2
+   201 confirmed                          100
+   404 not_found                            1
+   409 idempotency_key_reused               1
+   409 per_user_limit                       6
+   409 seat_taken                         201
+   transport error transport:IOException   22700
+   5xx + transport errors               22702
+   429 shed then retried (same key)         0
+
+================ RECONCILIATION ================
+   GET /shows: available=1885 held=0 confirmed=115 total=2000  (sum=2000)
+   seats in live reservations returned to us: 115  vs confirmed in API: 115
+   reservations_confirmed_total delta=100 client=100
+   reservations_declined_total{reason="seat_taken"} delta=201 client=201
+   reservations_declined_total{reason="per_user_limit"} delta=6 client=6
+   reservations_declined_total{reason="idempotent_replay"} delta=26 client=26
+   reservations_declined_total{reason="idempotency_key_reused"} delta=1 client=1
+   seats_available=1885.0 API=1885
+
+FAIL: 45410 violation(s):
+   - POST /shows/0b115b86-2efb-4b0c-8b1d-3e4773a5f2ed/reserve: transport error transport:IOException
+   - unexpected response: POST /shows/0b115b86-2efb-4b0c-8b1d-3e4773a5f2ed/reserve: transport error transport:IOException
+   - A12 losers must all be 409 seat_taken
+   - every multi-hot loser must be 409 seat_taken
+   - GET /shows/0b115b86-2efb-4b0c-8b1d-3e4773a5f2ed: transport error transport:IOException
+   - unexpected response: GET /shows/0b115b86-2efb-4b0c-8b1d-3e4773a5f2ed: transport error transport:IOException
+   - state poll failed: transport error transport:IOException
+   - stampede contained unexpected final outcomes
+   - 22702 server errors / transport failures during the burst

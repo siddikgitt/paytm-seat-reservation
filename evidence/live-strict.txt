@@ -1,0 +1,119 @@
+Picked up JAVA_TOOL_OPTIONS: -Xmx2g
+Burst run=2dnm6f target=https://seat-reservation-t3ml.onrender.com concurrency=20000 stampede=20000 hot_users=500 users=2000 hall=20x100
+strict=true retries_429=0
+waiting for https://seat-reservation-t3ml.onrender.com/readyz (cold start allowed) ready
+show 65881d04-672f-43c6-aae6-1a612a2bee8b created with 2000 seats
+minting 3000 user tokens ...
+running Phase 1: hot-seat storm, 500 users -> A12 ...
+running Phase 2: 5 hot seats x 500 users ...
+running Phase 3: stampede 20000 reserves (10% duplicated retries) ...
+   invariant checked on 150 live snapshots during the stampede
+running Phase 4: same idempotency key x20 in parallel ...
+running Phase 5: one user, 10 parallel reserves, limit 4 ...
+   greedy user ends with 4 seats (limit 4)
+
+================ OUTCOME DISTRIBUTION ================
+
+== Phase 1: hot-seat storm, 500 users -> A12  (500 requests in 10069 ms, 50 req/s)
+   201 confirmed                            1
+   409 seat_taken                         499
+   latency ms  p50=8036.3  p95=9843.4  p99=10026.4  max=10055.1
+
+== Phase 2: 5 hot seats x 500 users  (2500 requests in 27086 ms, 92 req/s)
+   201 confirmed                            5
+   409 seat_taken                        2489
+   transport error                          6
+   latency ms  p50=16963.1  p95=26443.5  p99=26909.2  max=27032.3
+
+== Phase 3: stampede 20000 reserves (10% duplicated retries)  (20000 requests in 120750 ms, 166 req/s)
+   200 idempotent replay                   30
+   201 confirmed                          717
+   409 per_user_limit                       1
+   409 seat_taken                        1017
+   502 SERVER ERROR                      6181
+   transport error                      12054
+   latency ms  p50=24754.6  p95=120000.3  p99=120002.6  max=120104.8
+
+== Phase 4: same idempotency key x20 in parallel  (21 requests in 461 ms, 46 req/s)
+   200 idempotent replay                   19
+   201 confirmed                            1
+   409 idempotency_key_reused               1
+   latency ms  p50=356.0  p95=459.9  p99=461.1  max=461.1
+
+== Phase 5: one user, 10 parallel reserves, limit 4  (10 requests in 232 ms, 43 req/s)
+   201 confirmed                            4
+   409 per_user_limit                       6
+   latency ms  p50=226.3  p95=231.6  p99=231.6  max=231.6
+
+== Phase 6: spoofing, owner-only cancel, rebook  (6 requests in 0 ms, 0 req/s)
+   200 ok                                   2
+   201 confirmed                            3
+   404 not_found                            1
+   latency ms  p50=91.3  p95=101.8  p99=101.8  max=101.8
+
+== Cold-start readiness attempts (before burst)  (1 requests in 0 ms, 0 req/s)
+   200 ok                                   1
+   latency ms  p50=585.1  p95=585.1  p99=585.1  max=585.1
+
+== Every HTTP attempt after readiness (including setup, probes and retries)  (26237 requests in 0 ms, 0 req/s)
+   200 idempotent replay                   49
+   200 ok                                3162
+   201 confirmed                          732
+   404 not_found                            1
+   409 idempotency_key_reused               1
+   409 per_user_limit                       7
+   409 seat_taken                        4005
+   502 SERVER ERROR                      6220
+   transport error                      12060
+   latency ms  p50=22630.2  p95=120000.0  p99=120001.8  max=120104.8
+
+== Every reservation HTTP attempt  (23034 requests in 0 ms, 0 req/s)
+   200 idempotent replay                   49
+   201 confirmed                          731
+   409 idempotency_key_reused               1
+   409 per_user_limit                       7
+   409 seat_taken                        4005
+   502 SERVER ERROR                      6181
+   transport error                      12060
+   latency ms  p50=23718.9  p95=120000.1  p99=120002.2  max=120104.8
+Peak outstanding HTTP attempts: 16370
+
+== TOTAL
+   200 idempotent replay                   49
+   200 ok                                   2
+   201 confirmed                          731
+   404 not_found                            1
+   409 idempotency_key_reused               1
+   409 per_user_limit                       7
+   409 seat_taken                        4005
+   502 SERVER ERROR                      6181
+   transport error                      12060
+   5xx + transport errors               18280
+   429 shed then retried (same key)         0
+
+================ RECONCILIATION ================
+   GET /shows: available=1162 held=0 confirmed=838 total=2000  (sum=2000)
+   seats in live reservations returned to us: 832  vs confirmed in API: 838
+   reservations_confirmed_total delta=83 client=731
+   reservations_declined_total{reason="seat_taken"} delta=214 client=4005
+   reservations_declined_total{reason="per_user_limit"} delta=6 client=7
+   reservations_declined_total{reason="idempotent_replay"} delta=23 client=49
+   reservations_declined_total{reason="idempotency_key_reused"} delta=1 client=1
+   seats_available=1162.0 API=1162
+
+FAIL: 36607 violation(s):
+   - POST /shows/65881d04-672f-43c6-aae6-1a612a2bee8b/reserve: transport error
+   - unexpected response: POST /shows/65881d04-672f-43c6-aae6-1a612a2bee8b/reserve: transport error
+   - every multi-hot loser must be 409 seat_taken
+   - POST /shows/65881d04-672f-43c6-aae6-1a612a2bee8b/reserve: 502 SERVER ERROR
+   - unexpected response: POST /shows/65881d04-672f-43c6-aae6-1a612a2bee8b/reserve: 502 SERVER ERROR
+   - GET /shows/65881d04-672f-43c6-aae6-1a612a2bee8b: 502 SERVER ERROR
+   - unexpected response: GET /shows/65881d04-672f-43c6-aae6-1a612a2bee8b: 502 SERVER ERROR
+   - state poll failed: 502 SERVER ERROR
+   - stampede contained unexpected final outcomes
+   - 18280 server errors / transport failures during the burst
+   - API confirmed count disagrees with the reservations the API handed out
+   - counter missing or inconsistent: reservations_confirmed_total delta=83.0 client=731
+   - counter missing or inconsistent: reservations_declined_total{reason="seat_taken"} delta=214.0 client=4005
+   - counter missing or inconsistent: reservations_declined_total{reason="per_user_limit"} delta=6.0 client=7
+   - counter missing or inconsistent: reservations_declined_total{reason="idempotent_replay"} delta=23.0 client=49

@@ -1,14 +1,21 @@
 # Seat Reservation at Scale
 
-A JSON HTTP service that sells assigned seats for a show and stays correct under an on-sale stampede:
-no seat is ever sold twice, no user exceeds their per-show limit, and a retried request never books twice.
-Java 21 + Spring Boot 3.3 (virtual threads) + PostgreSQL 16. Design notes are in [WRITEUP.md](WRITEUP.md).
+A JSON HTTP service for assigned seats, designed to prevent double sales, enforce per-show quotas,
+and make reservation retries idempotent. Public capacity limitations are documented below.
+Java 21 + Spring Boot 3.3 (virtual threads) + PostgreSQL (16 locally; Render provisioned 18). Design notes are in [WRITEUP.md](WRITEUP.md).
 
-**Submission status:** local verification in progress; public deployment and live evidence are not yet verified.
+**Submission status: NOT READY FOR HR.** The free deployment failed the strict concurrency gate.
+See [verified results and remaining blockers](VERIFICATION.md); the live URL alone is not a passing submission.
 
-**Repository:** publishing in progress.
+**Repository:** https://github.com/siddikgitt/paytm-seat-reservation
 
-**Live URL:** not deployed yet. See [Deploy to Render](#deploy-to-render).
+**Live service:** [readiness response](https://seat-reservation-t3ml.onrender.com/readyz)
+
+**API base URL:** `https://seat-reservation-t3ml.onrender.com` (the root path is not an API route).
+
+**Live logs under load:** [20-second recording](evidence/live-logs.mp4).
+
+[Readiness](https://seat-reservation-t3ml.onrender.com/readyz) · [Liveness](https://seat-reservation-t3ml.onrender.com/livez) · [Metrics](https://seat-reservation-t3ml.onrender.com/metrics)
 
 | What | Where |
 |---|---|
@@ -32,7 +39,8 @@ No JDK is needed locally: `burst.sh` falls back to running the single-file burst
 `eclipse-temurin:21-jdk` container, and `make test` runs Maven inside a container.
 
 > On macOS with Colima / Docker Desktop, the default 1000-connection burst against `localhost` goes
-> through the VM's port forwarder. If that struggles, run with `CONCURRENCY=300`.
+> through the VM's port forwarder. A smaller diagnostic run does not meet the strict grading requirement.
+> Run the strict client on a machine with sufficient connection and memory capacity.
 
 ## API
 
@@ -101,7 +109,7 @@ Cancelling again returns the same `200` and changes nothing. Another user's rese
 ## Burst
 
 ```bash
-./burst.sh https://<your-service>.onrender.com        # or: make burst URL=...
+./burst.sh https://seat-reservation-t3ml.onrender.com        # or: make burst URL=...
 ADMIN_KEY=<render ADMIN_API_KEY> ./burst.sh https://...
 ```
 
@@ -138,12 +146,18 @@ A local run is not proof that the public deployment meets the grading bar.
 ### Strict grading mode
 
 ```bash
-ADMIN_KEY=... STRICT=true ./burst.sh https://YOUR-LIVE-SERVICE.onrender.com
-# equivalent: ADMIN_KEY=... make burst-strict URL=https://YOUR-LIVE-SERVICE.onrender.com
+ADMIN_KEY=... STRICT=true ./burst.sh https://seat-reservation-t3ml.onrender.com
+# equivalent: ADMIN_KEY=... make burst-strict URL=https://seat-reservation-t3ml.onrender.com
 ```
 
+The client prefers HTTP/2 (with HTTP/1.1 fallback) and reports the negotiated protocol. This lets HTTPS
+requests share connections rather than requiring one TLS socket per buyer. The load generator uses multiple
+clients with at most 64 active requests each to avoid the observed 100-stream per-connection limit.
+Total client slots exceed the configured concurrency; strict mode still permits 20,000 active attempts.
+Token setup uses at most eight requests in flight and is separate from the reservation stampede.
 Strict mode forces 20,000 stampede tasks, permits 20,000 simultaneous HTTP attempts, and disables 429 retries,
-even if conflicting environment variables are supplied. Tasks wait behind a common start gate. The script reports
+even if conflicting environment variables are supplied. Strict requests allow up to 120 seconds to connect
+and 600 seconds for a response, so a slow free host is not silently replaced by a smaller burst. Tasks wait behind a common start gate. The script reports
 peak outstanding client HTTP attempts; this is not a claim that every connection reached the server simultaneously.
 A 429 or any unexpected outcome fails strict verification. Cold-start readiness attempts are counted separately
 from the burst, which begins once the service is ready. Every subsequent HTTP attempt is counted, including
@@ -190,15 +204,17 @@ response bodies.
 ```
 
 On Render the logs are under the service's **Logs** tab and can be searched with `request_id:` / `reason:`
-terms. A recording of the deployed log stream during a burst is required for the submission.
-Its verified link will be recorded in VERIFICATION.md; until then this deliverable is pending.
+terms. The [live-log recording](evidence/live-logs.mp4) captures the Render live tail at one frame per second
+during the public functional burst. It contains synthetic test users, request ids, outcomes, and timings.
+The recording is evidence of live logging, not proof that the burst passed; see VERIFICATION.md for results.
 
 ### Health
 
 - `/livez` checks only that the process is alive.
 - `/readyz` checks readiness plus a real `SELECT 1` on a **dedicated short-timeout connection** (2s) instead of
-  the pool. A dead database fails readiness within about 2s with `503`. A pool that is merely busy during a burst
-  doesn't make the instance look unhealthy. Render uses `/readyz` as its health check.
+  the pool. The probe has a two-second timeout and a one-second cache; the isolated outage test requires
+  `503` within six seconds and verifies recovery. This avoids pool-borrow contention, but HTTP connector
+  or CPU saturation can still delay health responses. Render uses `/readyz`.
 
 ## Deploy to Render
 
@@ -211,11 +227,9 @@ Its verified link will be recorded in VERIFICATION.md; until then this deliverab
    `ADMIN_KEY=... ./burst.sh https://seat-reservation-xxxx.onrender.com`.
 
 Plan notes:
-- The **free** web plan sleeps after 15 idle minutes and has about 0.1 CPU. The first request after sleep waits
-  for a cold start of about 45s. Public burst capacity must be measured; local results do not establish free-tier capacity.
-- **Starter** is always on with 0.5 CPU and is recommended for the grading window: change `plan: free` to
-  `plan: starter`, or switch it in the dashboard.
-- Free Render Postgres expires after 30 days.
+- The **free** web plan sleeps after 15 idle minutes. An explicit suspend/resume test reached readiness after 36.92 seconds; ordinary idle wake-up time can differ. Public burst capacity must be measured; local results do not establish free-tier capacity.
+- The provisioned free database expires on **November 4, 2026**, as shown in the Render dashboard.
+  No paid upgrade has been configured. See [Render free-service limits](https://render.com/docs/free).
 
 The app reads `DATABASE_URL` in Render/Heroku form (`postgres://user:pass@host[:port]/db`), so it also runs
 unchanged on Railway, Fly or Neon.
@@ -226,6 +240,8 @@ unchanged on Railway, Fly or Neon.
 |---|---|---|
 | `DATABASE_URL` | (none) | `postgres://...`; otherwise `SPRING_DATASOURCE_URL/USERNAME/PASSWORD` |
 | `DB_SSLMODE` | `prefer` | used when `DATABASE_URL` has no query string |
+| `HTTP_MAX_CONNECTIONS` | 2048 | bounds per-connection memory; remaining connections queue upstream |
+| `HTTP_ACCEPT_COUNT` | 20000 | requested OS connection backlog (subject to host limits) |
 | `DB_POOL_SIZE` | 20 | Hikari max pool |
 | `DB_CONNECTION_TIMEOUT_MS` | 30000 | pool borrow wait |
 | `ADMISSION_MAX_CONCURRENT` | 64 | write requests admitted to the DB at once |
@@ -241,6 +257,7 @@ unchanged on Railway, Fly or Neon.
 make test         # Maven + Testcontainers inside Docker (no local JDK)
 make test-local   # ./mvnw test with a local JDK 21
 make test-burst   # negative checks for the burst verifier, in normal and strict modes
+./mvnw -Dtest.postgres.image=postgres:18-alpine test  # match the provisioned Render database
 
 # Colima: Ryuk needs the Docker socket path inside the Linux VM
 TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock make test-local

@@ -1,0 +1,4 @@
+Observed during strict run 2en78d on application a743ce1, client 1e343f2.
+A diagnostic GET / returned HTTP 429 with HTML title "Just a moment..." and a challenges.cloudflare.com reference.
+This request was outside the burst and is not added to the burst counters.
+No edge challenge was solved or bypassed. Formal burst outcomes are recorded separately.

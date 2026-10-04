@@ -1,0 +1,13 @@
+Burst run=2duyr1 target=https://seat-reservation-t3ml.onrender.com concurrency=1000 stampede=20000 hot_users=500 users=2000 hall=20x100
+strict=false retries_429=5
+waiting for https://seat-reservation-t3ml.onrender.com/readyz (cold start allowed) ready
+show ec4fa90b-2243-440b-991d-3e4787f874b5 created with 2000 seats
+minting 3000 user tokens ...
+running Phase 1: hot-seat storm, 500 users -> A12 ...
+running Phase 2: 5 hot seats x 500 users ...
+running Phase 3: stampede 20000 reserves (10% duplicated retries) ...
+
+ABORTED — FAIL, not a completed or passing run.
+The operator stopped this run after Render Events reported another five-second HTTP health-check timeout
+at 01:36 Asia/Kolkata and service recovery at 01:37. A metrics probe after recovery showed reset counters.
+There is no final client outcome distribution for this aborted attempt.
