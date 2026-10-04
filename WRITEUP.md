@@ -1,0 +1,185 @@
+# Write-up
+
+## 1. The atomic decision
+
+The seat row is the unit of truth: `seats(show_id, label)` is the primary key, and the row has a single
+`reservation_id` and `user_id`. A seat structurally *cannot* belong to two reservations. The only open question is
+who gets to write that row, and a single guarded statement decides it:
+
+```sql
+UPDATE seats SET status='confirmed', reservation_id=:rid, user_id=:uid
+WHERE show_id=:show AND label = ANY(:seats) AND status='available'
+```
+
+It runs inside one READ COMMITTED transaction, after the rows are locked with
+`SELECT ... ORDER BY label COLLATE "C" FOR UPDATE`.
+
+Why it is race-free:
+- For the 500 people on A12, the first transaction takes A12's row lock. The other 499 block on that lock.
+  When the winner commits, Postgres re-evaluates each waiter's row against the latest version (EvalPlanQual),
+  sees `status='confirmed'`, and the waiter declines with `409 seat_taken`. No code path reads and then decides;
+  the predicate is evaluated under the lock.
+- Table CHECKs make the impossible states unrepresentable. A seat is `available` if and only if
+  `reservation_id IS NULL AND user_id IS NULL`, and `user_show_quota.seats_held >= 0`.
+- There is a **fast decline path** before the transaction: one statement reads the seat states and any existing
+  reservation for this idempotency key. It is advisory. It can only *refuse* (the seat is visibly taken), never
+  grant, so racing it is harmless. Because it is a single statement, it reads a single snapshot. If a concurrent
+  same-key request already committed the seat, the same snapshot also contains that reservation, so the retry is
+  reported as a replay rather than as "seat taken". This keeps the 499 losers off row locks entirely. In the hot
+  storm they cost one indexed read.
+
+**Multi-seat requests are all-or-nothing.** If any requested seat isn't available, the transaction rolls back and
+nothing is booked. That holds under concurrency because the locks are held until commit. **Deadlock freedom:**
+every transaction acquires locks in one global order:
+1. the reservation row, through the idempotency unique index
+2. the user's quota row
+3. seat rows sorted by label in byte order
+
+`FOR UPDATE` with `ORDER BY` locks rows in sort order. Because every transaction acquires locks in the same order,
+none can wait for a lock held by a transaction that is itself waiting on it, so a cycle can't form. Cancel uses the
+same order: reservation, then quota, then seats. The test suite fires 200 requests for random orderings of
+overlapping seat pairs and triples and checks for no 5xx, no deadlock errors, and all-or-nothing per reservation.
+Deadlock and serialization errors are still caught and retried up to 3 times as defence in depth.
+
+**Per-user limit.** This is one conditional upsert on `user_show_quota(show_id, user_id)`:
+
+```sql
+INSERT ... VALUES (:show, :user, :n)
+ON CONFLICT DO UPDATE SET seats_held = seats_held + :n WHERE seats_held + :n <= :limit
+```
+
+Zero rows affected means `409 per_user_limit`. The quota row lock serializes one user's parallel requests, and each
+one re-evaluates the predicate against the committed count. Ten parallel reserves on a limit-4 show give exactly
+4 seats; this is tested, and also checked by the burst. Cancel decrements the quota in the same transaction that
+frees the seats.
+
+## 2. Idempotency
+
+- **Where the key lives:** the reservation itself. `reservations` has `UNIQUE(user_id, show_id, idempotency_key)`
+  plus `request_hash`, the SHA-256 of the sorted seat set. Keys are scoped per user, so one user can't collide with
+  or probe another user's keys, and per show.
+- **Exactly once:** the first statement of the reserving transaction is `INSERT ... ON CONFLICT DO NOTHING` on that
+  unique key. When two requests with the same key race, the second insert blocks on the unique index until the
+  first transaction ends. If the first committed, the insert does nothing; the request reads the committed row and
+  returns it (`200`, `Idempotent-Replayed: true`). If the first rolled back (for example, the seat was taken), the
+  second simply proceeds as a fresh attempt. The reservation and its seats commit atomically, so a key is never
+  "used" without its seats, or the reverse. A 30-way same-key race gives one `201`, 29 `200`s with the same
+  `reservation_id`, and one row in the database.
+- **Same key, different body:** the replay path compares `request_hash`. A different seat set returns
+  `409 idempotency_key_reused`. Seat order is canonicalised, so `["A13","A12"]` is the same request as
+  `["A12","A13"]`.
+- **Status codes:** a replay is `200`, not `201`. A storm that includes retries therefore still shows exactly one
+  `201` per seat.
+- **Declines are not cached.** A key whose first attempt was declined has no row, so a retry re-evaluates and may
+  now succeed. That is the useful behaviour for "seat taken, retry later", and it can never double-book.
+- Replaying a key whose reservation was later cancelled returns the original reservation with
+  `status: "cancelled"`. It does not re-book.
+
+## 3. Holds and expiry
+
+I chose **immediate confirmation plus an explicit owner-only cancel**. The assignment's reserve response is
+`status: "confirmed"`, and there is no payment step to wait on, so a TTL hold would add a state with no work
+behind it. The schema already has `status='held'`, and the API reports `held` counts, so adding holds later
+doesn't need a migration of the state model.
+
+Cancel safety:
+- `SELECT ... FROM reservations WHERE id=:id AND user_id=:token_user FOR UPDATE`. Ownership is part of the
+  predicate, so another user's reservation looks exactly like a missing one (`404`).
+- The release is guarded on ownership, not on the seat label:
+  `UPDATE seats SET status='available', reservation_id=NULL, user_id=NULL WHERE reservation_id=:id`.
+  A cancel can therefore never free a seat that has since been confirmed to someone else. This is tested: cancel,
+  someone else rebooks, then a repeat cancel leaves the seat with the new owner.
+- Cancel is idempotent (`status='cancelled'` returns `200` and does nothing), and it returns the quota in the same
+  transaction.
+
+If I added TTL holds (the likely interview extension):
+- `reserve` writes `status='held', held_until=now()+ttl`.
+- `POST /reservations/{id}/confirm` does
+  `UPDATE ... WHERE reservation_id=:id AND status='held' AND held_until > now()`.
+- Expiry would be **lazy**, through the claim predicate:
+  `WHERE status='available' OR (status='held' AND held_until < now())`. Correctness never depends on a background
+  job, but the claimer must also decrement the expired holder's quota in the same transaction.
+- A sweeper would also run `UPDATE ... WHERE status='held' AND held_until < now()` in small batches with
+  `FOR UPDATE SKIP LOCKED`, so the counts in `GET /shows` converge.
+- Confirm and expiry contend on the same row lock, so a seat is either confirmed before its deadline or released,
+  never both.
+
+## 4. Consistency vs availability under a partition
+
+This is a single Postgres primary and it is deliberately **CP**. Every grant goes through a row lock on the
+primary. Nothing that could grant a seat is cached, replicated asynchronously, or decided in memory: the only
+in-process caches are immutable show metadata and verified JWTs.
+- If the app loses the database, `/readyz` goes `503` within about 2s, the platform stops routing to the
+  instance, and writes fail with `503` and `Retry-After`. The app never "assumes available".
+- An idempotency key makes those client retries safe.
+- Under overload, the admission bulkhead sheds with `429` *before* any read or write. Selling is unavailable for
+  the shed requests, which is the right trade for a system of record: a refused buyer can retry, but a double-sold
+  seat requires a human apology.
+- I would accept availability loss for reads before consistency loss for writes. `GET /shows` could be served
+  from a replica or a short cache with a staleness bound, but reserve must always hit the primary.
+- Scaling out keeps this property: app instances are stateless, so N instances still serialise on the same rows.
+  The counters are per-instance and Prometheus `sum()`s them. The seat gauges are read from the DB.
+
+## 5. Observability: what pages at 2am
+
+Page (wakes someone):
+- `seats_reconciliation_drift != 0` for any show. This should be impossible given the constraints, so if it
+  fires, data is wrong. Stop sales.
+- Any sustained `5xx`: `rate(http_server_requests_seconds_count{status=~"5.."}[2m]) > 0`. Declines are 4xx by
+  design, so a 5xx is always a bug or a dependency failure.
+- `/readyz` failing, or the DB health indicator DOWN, for more than 1 minute.
+- `hikaricp_connections_pending > 0` sustained for 2 minutes together with reserve p99 above 2s. This means the
+  database is the bottleneck during an on-sale.
+
+Ticket or dashboard (business hours):
+- `rate(requests_shed_total)` > 0: capacity is undersized for the on-sale. Scale up before the next one.
+- `reservations_declined_total{reason="idempotency_key_reused"}` rising: a client bug that is reusing keys.
+- `per_user_limit` declines spiking: bots or scalpers.
+- Gap between `seats_confirmed_total` and the `show_seats{status="confirmed"}` gauge after restarts (expected,
+  since counters reset), versus any gap between the gauge and `GET /shows` (unexpected).
+
+Every log line carries `request_id`, `user_id`, `show_id` and `outcome/reason`. "Why did my booking fail?" is
+answered with one query on the request id the client got back.
+
+## 6. AI usage (directed vs decided)
+
+> **Author note:** this section is a draft produced while building with an AI coding agent. Edit it so it states
+> what *you* decided. The interviewers will ask you to extend the service live.
+
+Tools: Cursor's agent (Claude) for planning, code generation, test writing, debugging, and running Docker builds
+and load tests.
+
+- **Directed by me:** the stack (Java 21 / Spring Boot / Postgres) and the platform (Render), chosen as what I
+  would extend fastest in an interview. Committing incrementally. Treating correctness under the burst, rather than
+  features, as the bar.
+- **Proposed by the AI, reviewed and accepted by me:** <!-- edit: say which of these you reviewed or changed -->
+  - the guarded-UPDATE plus ordered `FOR UPDATE` design
+  - the reservation row as the idempotency record (unique key plus request hash)
+  - the conditional upsert for the per-user quota
+  - `200` for replays so that one seat yields exactly one `201`
+  - the single-snapshot precheck
+  - the dedicated-connection readiness check
+- **Found by running the real thing:** each of these came from a measurement, not a guess.
+  - Testcontainers 1.19 can't talk to Docker Engine 29 (API 1.32 is too old), so I pinned 1.21.4.
+  - Under a 0.1 CPU / 512 MB limit matching Render free:
+    - Startup took 195s. AppCDS plus C1-only JIT brought it to about 43s.
+    - The container was OOM-killed. Capping heap, metaspace, code cache and direct memory fixed it.
+    - Pool-borrow timeouts surfaced as `500`. They are now mapped to `503`, a bulkhead now sheds with `429`
+      before touching state, and collapsing three precheck queries into one plus caching verified JWTs took the
+      throttled burst from 5,657 server errors to 0.
+- **What I would not delegate:** the correctness argument in sections 1 and 2, which I can reproduce on a
+  whiteboard. <!-- edit -->
+
+## 7. What I'd do next
+
+1. TTL holds with confirm and payment as described in section 3, including lazy expiry in the claim predicate and
+   an expiry sweeper.
+2. A virtual waiting room for on-sales larger than one primary can absorb: hand out admission tokens at a fixed
+   rate, so the database sees a steady stream instead of a cliff.
+3. Partition `seats` by `show_id` (hash) once the table has millions of shows. Hot-seat contention is per row, so
+   partitioning doesn't change the locking story.
+4. OpenTelemetry tracing (request id becomes trace id) and a Grafana dashboard plus alert rules from section 5,
+   checked into the repo.
+5. Turn the burst into a CI gate against an ephemeral environment, and add a chaos test that kills the DB
+   mid-burst and asserts no 5xx except `503` with `Retry-After`, plus reconciliation afterwards.
+6. A real identity provider (OIDC/JWKS) replacing `/auth/token`, and per-user rate limits in front of the bulkhead.
