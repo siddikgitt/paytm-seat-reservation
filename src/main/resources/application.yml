@@ -1,0 +1,82 @@
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+  tomcat:
+    # Virtual threads serve each request; let the burst queue inside Tomcat
+    # rather than be refused at the socket.
+    max-connections: 20000
+    accept-count: 10000
+    connection-timeout: 30s
+
+spring:
+  application:
+    name: seat-reservation
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/seats}
+    username: ${SPRING_DATASOURCE_USERNAME:seats}
+    password: ${SPRING_DATASOURCE_PASSWORD:seats}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      # Requests wait for a connection instead of failing during a stampede.
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:30000}
+      pool-name: seats-pool
+  flyway:
+    enabled: true
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    default-property-inclusion: non_null
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+app:
+  jwt-secret: ${JWT_SECRET:dev-only-secret-change-me}
+  admin-api-key: ${ADMIN_API_KEY:dev-admin-key}
+  token-ttl: ${TOKEN_TTL:24h}
+  default-per-user-limit: 4
+  max-seats-per-show: 20000
+  metrics:
+    tracked-shows: 20
+    refresh-ms: 1000
+
+management:
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health,prometheus,info
+      path-mapping:
+        prometheus: metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+        add-additional-paths: true
+      show-details: always
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,database
+  health:
+    db:
+      enabled: false
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 10ms,50ms,100ms,250ms,500ms,1s,2s,5s
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.zaxxer.hikari: WARN
+    org.flywaydb: INFO
