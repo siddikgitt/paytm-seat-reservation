@@ -20,6 +20,8 @@
         <java.version>21</java.version>
         <nimbus-jose-jwt.version>9.41.2</nimbus-jose-jwt.version>
         <logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>
+        <!-- 1.21.4+ negotiates a Docker API version accepted by Docker Engine 29 -->
+        <testcontainers.version>1.21.4</testcontainers.version>
     </properties>
 
     <dependencies>
