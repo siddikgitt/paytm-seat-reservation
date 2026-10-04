@@ -45,6 +45,15 @@ public class BurstChecksTest {
         if (!Long.valueOf(9007199254740993L).equals(new Burst.Json("9007199254740993").parse())) {
             throw new AssertionError("JSON integer lost precision");
         }
+        var diagnosticHeaders = Map.of("Server", List.of("cloudflare"), "CF-Mitigated", List.of("challenge"),
+                "Set-Cookie", List.of("private-cookie"), "Authorization", List.of("private-token"));
+        String attribution = Burst.failureSource(429, diagnosticHeaders, "<title>Just a moment</title>");
+        if (!attribution.contains("ingress=absent") || !attribution.contains("mitigation=challenge")
+                || !attribution.contains("challenge_page=true")) throw new AssertionError(attribution);
+        if (Burst.failureMetadata(diagnosticHeaders).toString().contains("private-")) {
+            throw new AssertionError("diagnostics leaked sensitive headers");
+        }
+        checks += 2;
         System.out.println("PASS: " + checks + " burst verifier checks; strict=" + Burst.strict);
     }
 

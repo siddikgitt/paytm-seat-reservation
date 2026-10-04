@@ -56,6 +56,7 @@ public class Burst {
     static final AtomicInteger activeHttp = new AtomicInteger();
     static final AtomicInteger peakHttp = new AtomicInteger();
     static final Map<String, LongAdder> protocols = new ConcurrentHashMap<>();
+    static final Map<String, LongAdder> failureSources = new ConcurrentHashMap<>();
     static volatile boolean warmingUp = true;
     static final String RUN = Long.toString(System.currentTimeMillis() % 1_000_000_000L, 36);
 
@@ -148,6 +149,7 @@ public class Burst {
         try {
             run(args);
         } catch (Exception e) {
+            printFailureSources();
             attempts.print();
             reserveAttempts.print();
             System.err.println("FAIL: burst aborted: " + e);
@@ -336,6 +338,7 @@ public class Burst {
         reserveAttempts.print();
         System.out.println("Peak outstanding HTTP attempts: " + peakHttp.get());
         System.out.println("Negotiated response protocols: " + protocols);
+        printFailureSources();
         Map<String, Long> totals = new TreeMap<>();
         all.forEach(s -> s.outcomes.forEach((k, v) -> totals.merge(k, v.sum(), Long::sum)));
         System.out.println("\n== TOTAL");
@@ -605,6 +608,15 @@ public class Burst {
                     Clients.slots.add(client);
                 }
                 protocols.computeIfAbsent(resp.version().name(), k -> new LongAdder()).increment();
+                if (resp.statusCode() == 429 || resp.statusCode() >= 500) {
+                    String source = failureSource(resp.statusCode(), resp.headers().map(), resp.body());
+                    LongAdder count = failureSources.computeIfAbsent(source, k -> new LongAdder());
+                    count.increment();
+                    if (count.sum() <= 2) {
+                        // Response metadata only. Never print tokens, cookies, request bodies or error HTML.
+                        System.err.println("Failure sample: " + source + " metadata=" + failureMetadata(resp.headers().map()));
+                    }
+                }
                 long micros = (System.nanoTime() - start) / 1000;
                 String ct = resp.headers().firstValue("Content-Type").orElse("");
                 Object parsed = ct.contains("json") && !resp.body().isEmpty() ? new Json(resp.body()).parse() : resp.body();
@@ -620,6 +632,34 @@ public class Burst {
                     ? ":too_many_concurrent_streams" : "";
             return new Res(0, e.toString(), "transport:" + e.getClass().getSimpleName() + detail, (System.nanoTime() - start) / 1000, false);
         }
+    }
+
+    static String failureSource(int status, Map<String, List<String>> headers, String body) {
+        String lower = body.toLowerCase(java.util.Locale.ROOT);
+        return status + " ingress=" + header(headers, "x-seat-ingress")
+                + " server=" + header(headers, "server")
+                + " mitigation=" + header(headers, "cf-mitigated")
+                + " rate_limit_page=" + (lower.contains("rate limited") || lower.contains("error 1015"))
+                + " challenge_page=" + (lower.contains("/cdn-cgi/challenge-platform/") || lower.contains("just a moment"));
+    }
+
+    static Map<String, String> failureMetadata(Map<String, List<String>> headers) {
+        var safe = new TreeMap<String, String>();
+        for (String name : List.of("content-type", "cf-ray", "rndr-id", "x-request-id", "retry-after")) {
+            safe.put(name, header(headers, name));
+        }
+        return safe;
+    }
+
+    static String header(Map<String, List<String>> headers, String name) {
+        return headers.entrySet().stream().filter(e -> name.equalsIgnoreCase(e.getKey()))
+                .flatMap(e -> e.getValue().stream()).findFirst().orElse("absent")
+                .replaceAll("[\\r\\n]", " ");
+    }
+
+    static void printFailureSources() {
+        System.out.println("Failure attribution (all HTTP attempts):");
+        new TreeMap<>(failureSources).forEach((source, count) -> System.out.println("   " + count.sum() + " " + source));
     }
 
     static String jsonArray(List<String> xs) {
