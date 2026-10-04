@@ -1,0 +1,23 @@
+{
+  "test": "Focused local HTTP/2 memory and hot-seat diagnostic, not the full acceptance suite",
+  "requests": 20000,
+  "sessions": 313,
+  "retries": 0,
+  "gateway_memory_limit_mib": 512,
+  "gateway_cpu_limit": 0.2,
+  "application_memory_limit_mib": 512,
+  "application_cpu_limit": 0.2,
+  "result": {
+    "counts": {
+      "201": 1,
+      "409": 19999
+    },
+    "failures": 0,
+    "elapsed_seconds": 73.83,
+    "pass": true
+  },
+  "gateway_memory_peak_bytes": 338161664,
+  "gateway_memory_events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n",
+  "app_memory_peak_bytes": 233115648,
+  "app_memory_events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n"
+}

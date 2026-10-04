@@ -3,6 +3,7 @@ set -euo pipefail
 
 export PORT="${PORT:-8080}"
 export APP_PORT="${APP_PORT:-18080}"
+export APP_HOST="${APP_HOST:-127.0.0.1}"
 export HAPROXY_BUFFER_SIZE="${HAPROXY_BUFFER_SIZE:-4096}"
 export HAPROXY_BUFFER_LIMIT="${HAPROXY_BUFFER_LIMIT:-0}"
 
