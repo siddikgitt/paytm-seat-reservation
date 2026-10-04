@@ -24,6 +24,7 @@ public class ShowService {
 
     private static final Logger log = LoggerFactory.getLogger(ShowService.class);
     public static final Pattern SEAT_LABEL = Pattern.compile("[A-Za-z0-9_-]{1,16}");
+    private static final long MAX_PRICE_PAISE = 1_000_000_000_00L;
 
     public record CreateShow(String name, List<String> seats, Long pricePaise, Integer perUserLimit) {
     }
@@ -42,8 +43,9 @@ public class ShowService {
         if (req == null || req.name() == null || req.name().isBlank() || req.name().length() > 200) {
             throw ApiException.badRequest("invalid_request", "name is required (max 200 chars)");
         }
-        if (req.pricePaise() == null || req.pricePaise() <= 0) {
-            throw ApiException.badRequest("invalid_request", "price_paise must be a positive integer (paise)");
+        if (req.pricePaise() == null || req.pricePaise() <= 0 || req.pricePaise() > MAX_PRICE_PAISE) {
+            throw ApiException.badRequest("invalid_request",
+                    "price_paise must be a positive integer (paise) up to " + MAX_PRICE_PAISE);
         }
         int limit = req.perUserLimit() == null ? props.defaultPerUserLimit() : req.perUserLimit();
         if (limit < 1 || limit > 100) {
