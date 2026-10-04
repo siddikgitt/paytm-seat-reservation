@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.jdbc.CannotGetJdbcConnectionException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.ServletRequestBindingException;
@@ -26,7 +27,12 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> handleApi(ApiException e) {
-        return respond(e.status(), e.reason(), e.getMessage());
+        ResponseEntity<ErrorResponse> response = respond(e.status(), e.reason(), e.getMessage());
+        if (e.status() == HttpStatus.TOO_MANY_REQUESTS) {
+            return ResponseEntity.status(response.getStatusCode()).header(HttpHeaders.RETRY_AFTER, "2")
+                    .body(response.getBody());
+        }
+        return response;
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -60,7 +66,8 @@ public class ApiExceptionHandler {
     }
 
     /** Pool exhaustion or a lock retry budget running out: tell the client to retry, never pretend it was a decline. */
-    @ExceptionHandler({CannotGetJdbcConnectionException.class, TransientDataAccessException.class})
+    @ExceptionHandler({CannotGetJdbcConnectionException.class, CannotCreateTransactionException.class,
+            TransientDataAccessException.class})
     public ResponseEntity<ErrorResponse> handleTransient(Exception e) {
         log.warn("transient datastore failure", e);
         RequestContext.outcome("error", "unavailable");

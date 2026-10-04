@@ -32,9 +32,11 @@ public class ReservationController {
     }
 
     private final ReservationService reservations;
+    private final AdmissionControl admission;
 
-    public ReservationController(ReservationService reservations) {
+    public ReservationController(ReservationService reservations, AdmissionControl admission) {
         this.reservations = reservations;
+        this.admission = admission;
     }
 
     /**
@@ -46,7 +48,7 @@ public class ReservationController {
     public ResponseEntity<ReservationView> reserve(AuthUser user, @PathVariable UUID showId,
                                                    @RequestBody(required = false) ReservationService.ReserveRequest body,
                                                    @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String key) {
-        ReservationService.ReserveResult result = reservations.reserve(user, showId, body, key);
+        ReservationService.ReserveResult result = admission.admit(() -> reservations.reserve(user, showId, body, key));
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
                 .header(REPLAYED_HEADER, Boolean.toString(result.replayed()))
                 .body(ReservationView.of(result.reservation()));
@@ -55,7 +57,7 @@ public class ReservationController {
     /** Only the owner may cancel; anyone else gets 404. Cancelling twice returns the cancelled reservation. */
     @PostMapping("/reservations/{id}/cancel")
     public ReservationView cancel(AuthUser user, @PathVariable UUID id) {
-        return ReservationView.of(reservations.cancel(user, id));
+        return ReservationView.of(admission.admit(() -> reservations.cancel(user, id)));
     }
 
     @GetMapping("/reservations/{id}")

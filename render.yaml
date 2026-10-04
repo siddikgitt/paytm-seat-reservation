@@ -1,0 +1,31 @@
+# Render Blueprint: New > Blueprint > pick this repo. Creates the web service and its Postgres.
+services:
+  - type: web
+    name: seat-reservation
+    runtime: docker
+    # "free" sleeps after 15 min idle and has ~0.1 CPU. Use "starter" (always on, 0.5 CPU) for the grading window.
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /readyz
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: seat-reservation-db
+          property: connectionString
+      - key: DB_SSLMODE
+        value: prefer
+      - key: DB_POOL_SIZE
+        value: "20"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_API_KEY
+        generateValue: true
+
+databases:
+  - name: seat-reservation-db
+    plan: free
+    region: singapore
+    databaseName: seats
+    user: seats

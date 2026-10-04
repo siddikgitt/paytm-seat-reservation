@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-command on-sale stampede: ./burst.sh <BASE_URL>
 # Uses a local JDK 21+ if present, otherwise runs the same single-file program inside a JDK container.
-# Tunables (env): ADMIN_KEY CONCURRENCY STAMPEDE HOT_USERS USERS ROWS COLS RETRY_PCT
+# Tunables (env): ADMIN_KEY CONCURRENCY STAMPEDE HOT_USERS USERS ROWS COLS RETRY_PCT RETRIES_429
 set -euo pipefail
 
 BASE_URL="${1:-${BASE_URL:-http://localhost:8080}}"
@@ -25,7 +25,7 @@ fi
 TARGET="$(echo "$BASE_URL" | sed -E 's#//(localhost|127\.0\.0\.1)([:/]|$)#//host.docker.internal\2#')"
 exec docker run --rm -i \
   --add-host=host.docker.internal:host-gateway \
-  -e ADMIN_KEY -e CONCURRENCY -e STAMPEDE -e HOT_USERS -e USERS -e ROWS -e COLS -e RETRY_PCT \
+  -e ADMIN_KEY -e CONCURRENCY -e STAMPEDE -e HOT_USERS -e USERS -e ROWS -e COLS -e RETRY_PCT -e RETRIES_429 \
   -v "$DIR/scripts:/scripts:ro" \
   eclipse-temurin:21-jdk \
   java $JAVA_OPTS /scripts/Burst.java "$TARGET"

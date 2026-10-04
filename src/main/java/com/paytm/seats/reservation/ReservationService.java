@@ -72,27 +72,22 @@ public class ReservationService {
         List<String> seats = normalizeSeats(body == null ? null : body.seats());
         String requestHash = hash(seats);
 
-        Optional<Reservation> prior = repo.findByKey(user.userId(), showId, key);
-        if (prior.isPresent()) {
-            return replay(prior.get(), requestHash);
+        ReservationRepository.Precheck pre = repo.precheck(user.userId(), showId, key, seats);
+        if (pre.existingReservationId() != null) {
+            Reservation prior = repo.findById(pre.existingReservationId())
+                    .orElseThrow(() -> new IllegalStateException("reservation vanished"));
+            return replay(prior, requestHash);
+        }
+        if (pre.found() != seats.size()) {
+            metrics.declined(ReservationMetrics.INVALID);
+            RequestContext.outcome("declined", "unknown_seat");
+            throw ApiException.badRequest("unknown_seat", "one or more seats do not exist in this show");
         }
         if (seats.size() > show.perUserLimit()) {
             throw decline(ReservationMetrics.PER_USER_LIMIT,
                     "request exceeds per-user limit of " + show.perUserLimit());
         }
-
-        List<SeatRow> states = repo.seatStates(showId, seats);
-        if (states.size() != seats.size()) {
-            metrics.declined(ReservationMetrics.INVALID);
-            RequestContext.outcome("declined", "unknown_seat");
-            throw ApiException.badRequest("unknown_seat", "one or more seats do not exist in this show");
-        }
-        if (states.stream().anyMatch(s -> s.status() != SeatStatus.AVAILABLE)) {
-            // A concurrent request with this same key may be the one that took the seat; that is a replay.
-            prior = repo.findByKey(user.userId(), showId, key);
-            if (prior.isPresent()) {
-                return replay(prior.get(), requestHash);
-            }
+        if (pre.unavailable() > 0) {
             throw decline(ReservationMetrics.SEAT_TAKEN, "seat already taken");
         }
 

@@ -6,6 +6,8 @@ import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
 import java.time.Instant;
 import java.util.Date;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Service;
 
@@ -26,9 +28,15 @@ public class TokenService {
     private static final String ISSUER = "seat-reservation";
     private static final String ROLE_CLAIM = "role";
 
+    private static final int MAX_CACHED_TOKENS = 100_000;
+
+    private record Verified(AuthUser user, long expiresAtMillis) {
+    }
+
     private final AppProperties props;
     private final MACSigner signer;
     private final MACVerifier verifier;
+    private final Map<String, Verified> verified = new ConcurrentHashMap<>();
 
     public TokenService(AppProperties props) throws JOSEException {
         this.props = props;
@@ -55,7 +63,18 @@ public class TokenService {
         return jwt.serialize();
     }
 
+    /** Verified tokens are cached until expiry so a burst does not re-verify the same JWT thousands of times. */
     public AuthUser verify(String token) {
+        Verified hit = verified.get(token);
+        if (hit != null) {
+            if (hit.expiresAtMillis() > System.currentTimeMillis()) {
+                return hit.user();
+            }
+            verified.remove(token);
+        }
+        if (verified.size() >= MAX_CACHED_TOKENS) {
+            verified.clear();
+        }
         try {
             SignedJWT jwt = SignedJWT.parse(token);
             if (!JWSAlgorithm.HS256.equals(jwt.getHeader().getAlgorithm()) || !jwt.verify(verifier)) {
@@ -67,7 +86,9 @@ public class TokenService {
                     || claims.getSubject() == null) {
                 throw ApiException.unauthorized("token expired or invalid");
             }
-            return new AuthUser(claims.getSubject(), "admin".equals(claims.getStringClaim(ROLE_CLAIM)));
+            AuthUser user = new AuthUser(claims.getSubject(), "admin".equals(claims.getStringClaim(ROLE_CLAIM)));
+            verified.put(token, new Verified(user, exp.getTime()));
+            return user;
         } catch (ParseException | JOSEException e) {
             throw ApiException.unauthorized("malformed token");
         }

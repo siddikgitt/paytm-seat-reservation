@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.LongAdder;
  * distribution and a final reconciliation against GET /shows/{id} and /metrics. Exits 1 on any violation.
  *
  * Env: ADMIN_KEY (dev-admin-key), CONCURRENCY (1000), STAMPEDE (20000), HOT_USERS (500), USERS (2000),
- *      ROWS (20), COLS (100), RETRY_PCT (10).
+ *      ROWS (20), COLS (100), RETRY_PCT (10), RETRIES_429 (5; 0 = report 429s without retrying).
  */
 public class Burst {
 
@@ -44,6 +44,8 @@ public class Burst {
     static int rows = Integer.parseInt(env("ROWS", "20"));
     static int cols = Integer.parseInt(env("COLS", "100"));
     static int retryPct = Integer.parseInt(env("RETRY_PCT", "10"));
+    static int retries429 = Integer.parseInt(env("RETRIES_429", "5"));
+    static final LongAdder shed429 = new LongAdder();
     static final String RUN = Long.toString(System.currentTimeMillis() % 1_000_000_000L, 36);
 
     static final HttpClient http = HttpClient.newBuilder()
@@ -289,6 +291,7 @@ public class Burst {
         totals.forEach((k, v) -> System.out.printf("   %-34s %7d%n", k, v));
         long fiveXX = all.stream().mapToLong(Stats::fiveXX).sum();
         System.out.printf("   %-34s %7d%n", "5xx + transport errors", fiveXX);
+        System.out.printf("   %-34s %7d%n", "429 shed then retried (same key)", shed429.sum());
         expect(fiveXX == 0, fiveXX + " server errors / transport failures during the burst");
 
         System.out.println("\n================ RECONCILIATION ================");
@@ -354,8 +357,14 @@ public class Burst {
     }
 
     static Res reserve(String token, String userId, String showId, List<String> seats, String key) {
-        Res r = call("POST", "/shows/" + showId + "/reserve", token,
-                "{\"seats\":" + jsonArray(seats) + ",\"idempotency_key\":\"" + key + "\"}", Map.of());
+        String body = "{\"seats\":" + jsonArray(seats) + ",\"idempotency_key\":\"" + key + "\"}";
+        Res r = call("POST", "/shows/" + showId + "/reserve", token, body, Map.of());
+        // 429 = load shed before any state change; a real client retries with the same key.
+        for (int attempt = 0; r.status() == 429 && attempt < retries429; attempt++) {
+            shed429.increment();
+            sleep(1000L + new Random().nextInt(2000));
+            r = call("POST", "/shows/" + showId + "/reserve", token, body, Map.of());
+        }
         if (r.status() == 201 || r.status() == 200) {
             String rid = r.str("reservation_id");
             String prev = keyToReservation.putIfAbsent(userId + "|" + key, rid);

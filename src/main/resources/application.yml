@@ -41,6 +41,10 @@ app:
   metrics:
     tracked-shows: 20
     refresh-ms: 1000
+  admission:
+    # Write requests allowed to touch the DB at once; the rest queue for up to max-wait, then get 429.
+    max-concurrent: ${ADMISSION_MAX_CONCURRENT:64}
+    max-wait: ${ADMISSION_MAX_WAIT:25s}
 
 management:
   endpoints:

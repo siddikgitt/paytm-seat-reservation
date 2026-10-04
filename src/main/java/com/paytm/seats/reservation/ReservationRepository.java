@@ -55,10 +55,29 @@ public class ReservationRepository {
                 RESERVATION, showId, userId);
     }
 
-    /** Advisory read for the fast decline path. Never used to grant a seat. */
-    public List<SeatRow> seatStates(UUID showId, List<String> labels) {
-        return jdbc.query("SELECT label, status FROM seats WHERE show_id = ? AND label = ANY(?::text[])",
-                SEAT, showId, labels.toArray(String[]::new));
+    /**
+     * Result of the pre-check: an existing reservation for this idempotency key (if any), how many of the
+     * requested seats exist, and how many of those are not available.
+     */
+    public record Precheck(UUID existingReservationId, int found, int unavailable) {
+    }
+
+    /**
+     * Advisory read for the fast decline path; never used to grant a seat. One statement means one MVCC
+     * snapshot: if a concurrent same-key request has already committed the seat, this snapshot also sees
+     * its reservation row, so a retry is reported as a replay rather than as "seat taken".
+     */
+    public Precheck precheck(String userId, UUID showId, String idempotencyKey, List<String> labels) {
+        return jdbc.queryForObject("""
+                SELECT (SELECT r.id FROM reservations r
+                         WHERE r.user_id = ? AND r.show_id = ? AND r.idempotency_key = ?) AS existing_id,
+                       count(*) AS found,
+                       count(*) FILTER (WHERE s.status <> 'available') AS unavailable
+                FROM seats s
+                WHERE s.show_id = ? AND s.label = ANY(?::text[])
+                """, (rs, i) -> new Precheck(rs.getObject("existing_id", UUID.class), rs.getInt("found"),
+                        rs.getInt("unavailable")),
+                userId, showId, idempotencyKey, showId, labels.toArray(String[]::new));
     }
 
     /**
