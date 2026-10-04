@@ -1,0 +1,777 @@
+{
+  "revision": "c8938d7",
+  "result": "FAIL",
+  "samples": [
+    {
+      "elapsed_seconds": 17.31,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 20.48,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 23.6,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 26.76,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 29.9,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 33.05,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 36.19,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 39.31,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 42.47,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 45.58,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 48.75,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 51.92,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 55.05,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 58.21,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 61.41,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 64.58,
+      "app": {
+        "status": "503",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 67.71,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 71.02,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 74.33,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 77.58,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 80.78,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 84.17,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 87.41,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 90.79,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 93.98,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 97.19,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 100.38,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 103.61,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 106.79,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 109.96,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 113.19,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 116.4,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 119.59,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 122.77,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 125.97,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 129.18,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 132.58,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 135.78,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 138.95,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 142.18,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 145.37,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 148.58,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 151.8,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 154.97,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 158.2,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 161.4,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 164.57,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 167.76,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 170.98,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 174.19,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 177.42,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 180.58,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 183.77,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 187.06,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 190.26,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 193.44,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 196.62,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 199.88,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 203.08,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 206.24,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 209.5,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 212.71,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 215.88,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 219.06,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 222.28,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 225.51,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 228.7,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 231.87,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 235.09,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    },
+    {
+      "elapsed_seconds": 238.27,
+      "app": {
+        "status": "200",
+        "curl_exit": 0
+      },
+      "gateway": {
+        "status": "503",
+        "curl_exit": 0
+      }
+    }
+  ],
+  "diagnosis": "After app pause/resume, service DNS resolved a new address. Direct wget from gateway to current service hostname returned readiness UP. HAProxy connections remained SYN_SENT to the previous address and its local readiness returned 503. Runtime DNS refresh was absent."
+}

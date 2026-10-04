@@ -1,0 +1,20 @@
+# Use with docker-compose.yml for the two-service Northflank topology.
+services:
+  db:
+    image: postgres:18-alpine
+    command: ["postgres", "-c", "max_connections=100"]
+  app:
+    mem_limit: 512m
+    cpus: 0.2
+  gateway:
+    build:
+      context: .
+      dockerfile: deploy/gateway.Dockerfile
+    mem_limit: 512m
+    cpus: 0.2
+    depends_on: [app]
+    environment:
+      APP_HOST: app
+      APP_PORT: 8080
+    ports:
+      - "8081:8080"

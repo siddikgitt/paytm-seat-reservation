@@ -1,0 +1,17 @@
+{
+  "result": "PASS",
+  "environment": "Docker Compose, separate gateway and app, each 512MiB / 0.2 CPU",
+  "old_app_ip": "172.20.0.3",
+  "new_app_ip": "172.20.0.5",
+  "gateway_container_unchanged": true,
+  "old_address_occupied_by_test_container": true,
+  "readiness_recovered_without_gateway_restart": true,
+  "reservation_and_idempotency_persisted": true,
+  "counts": {
+    "available": 1,
+    "held": 0,
+    "confirmed": 1,
+    "total": 2
+  },
+  "note": "Application container recreated; PostgreSQL retained. Recovery polling began after replacement startup command."
+}
