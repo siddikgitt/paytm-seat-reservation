@@ -1,0 +1,8 @@
+{
+  "application_revision": "c8938d7",
+  "compose_file": "compose.gateway.yml",
+  "command": "docker compose -f docker-compose.yml -f compose.gateway.yml up --build -d",
+  "result": "PASS: /readyz and /livez returned UP through port 8081",
+  "limits": "app and gateway each 512 MiB and 0.2 CPU; PostgreSQL 18",
+  "note": "Compose overlay is added in the evidence commit after the tested application revision."
+}

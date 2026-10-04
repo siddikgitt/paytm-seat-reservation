@@ -4,18 +4,18 @@ A JSON HTTP service for assigned seats, designed to prevent double sales, enforc
 and make reservation retries idempotent. Public capacity limitations are documented below.
 Java 21 + Spring Boot 3.3 (virtual threads) + PostgreSQL (16 locally; Northflank provisioned 18). Design notes are in [WRITEUP.md](WRITEUP.md).
 
-**Submission status: NOT READY FOR HR.** The repaired deployment passes the functional burst; the free public deployment still fails the strict 20,000-concurrent gate.
-See [verified results and remaining blockers](VERIFICATION.md); the live URL alone is not a passing submission.
+**Submission status: acceptance checks passed on October 5, 2026.** Both public burst modes, restart persistence, database outage recovery and clean-checkout Docker startup passed.
+See [verified results and measured limits](VERIFICATION.md).
 
 **Repository:** https://github.com/siddikgitt/paytm-seat-reservation
 
-**Live service:** [readiness response](https://p01--seat-reservation--wlpk4pp6vqpm.code.run/readyz)
+**Live service:** [readiness response](https://p01--seat-gateway--wlpk4pp6vqpm.code.run/readyz)
 
-**API base URL:** `https://p01--seat-reservation--wlpk4pp6vqpm.code.run` (the root path is not an API route).
+**API base URL:** `https://p01--seat-gateway--wlpk4pp6vqpm.code.run` (the root path is not an API route).
 
-**Live logs under load:** [20-second recording](evidence/northflank-live-logs.mp4).
+**Live logs under load:** [21-second recording](evidence/gateway-final-live-logs.mp4).
 
-[Readiness](https://p01--seat-reservation--wlpk4pp6vqpm.code.run/readyz) · [Liveness](https://p01--seat-reservation--wlpk4pp6vqpm.code.run/livez) · [Metrics](https://p01--seat-reservation--wlpk4pp6vqpm.code.run/metrics)
+[Readiness](https://p01--seat-gateway--wlpk4pp6vqpm.code.run/readyz) · [Liveness](https://p01--seat-gateway--wlpk4pp6vqpm.code.run/livez) · [Metrics](https://p01--seat-gateway--wlpk4pp6vqpm.code.run/metrics)
 
 | What | Where |
 |---|---|
@@ -27,7 +27,7 @@ See [verified results and remaining blockers](VERIFICATION.md); the live URL alo
 
 ## Quick start (clean checkout)
 
-Requires only Docker. The image is built with the same `Dockerfile` that Render uses.
+Requires only Docker. The application image uses the root `Dockerfile`; the deployed gateway has its own Dockerfile.
 
 ```bash
 make up                       # docker compose up --build, waits for /readyz
@@ -109,8 +109,9 @@ Cancelling again returns the same `200` and changes nothing. Another user's rese
 ## Burst
 
 ```bash
-./burst.sh https://p01--seat-reservation--wlpk4pp6vqpm.code.run        # or: make burst URL=...
-ADMIN_KEY=<deployed ADMIN_API_KEY> ./burst.sh https://...
+export BASE_URL=https://p01--seat-gateway--wlpk4pp6vqpm.code.run
+# Export ADMIN_KEY with the private deployment credential first.
+JAVA_TOOL_OPTIONS=-Xmx2g ./burst.sh "$BASE_URL"
 ```
 
 Phases:
@@ -146,8 +147,8 @@ A local run is not proof that the public deployment meets the grading bar.
 ### Strict grading mode
 
 ```bash
-ADMIN_KEY=... STRICT=true ./burst.sh https://p01--seat-reservation--wlpk4pp6vqpm.code.run
-# equivalent: ADMIN_KEY=... make burst-strict URL=https://p01--seat-reservation--wlpk4pp6vqpm.code.run
+JAVA_TOOL_OPTIONS=-Xmx2g ADMIN_KEY=... STRICT=true ./burst.sh https://p01--seat-gateway--wlpk4pp6vqpm.code.run
+# equivalent: ADMIN_KEY=... make burst-strict URL=https://p01--seat-gateway--wlpk4pp6vqpm.code.run
 ```
 
 The client prefers HTTP/2 (with HTTP/1.1 fallback) and reports the negotiated protocol. This lets HTTPS
@@ -206,10 +207,10 @@ response bodies.
 {"ts":"...","message":"request","logger_name":"access","level":"INFO","request_id":"burst-27ojwt-1a2b3c4d","user_id":"u17","show_id":"3731e110-...","outcome":"declined","reason":"seat_taken","method":"POST","path":"/shows/3731e110-.../reserve","status":409,"latency_ms":12}
 ```
 
-On Northflank, open the service's **Logs** tab. The [live-log recording](evidence/northflank-live-logs.mp4)
-captures the live stream at one frame per second during functional burst `2ikkxp` on revision `0b5b4d8`.
-It contains synthetic users and no deployment credentials. The recording proves live logging;
-[VERIFICATION.md](VERIFICATION.md) separately records the load outcomes.
+On Northflank, open **seat-reservation > Logs**. The [live-log recording](evidence/gateway-final-live-logs.mp4)
+captures actual application logs during strict burst `2lbgsi` on revision `fb52455`, at one frame per second.
+It shows synthetic users, request IDs and outcomes; no deployment credentials are included.
+See [VERIFICATION.md](VERIFICATION.md) for the corresponding complete load result.
 
 ### Health
 
@@ -221,15 +222,22 @@ It contains synthetic users and no deployment credentials. The recording proves 
 
 ## Current deployment: Northflank
 
-The live service and private PostgreSQL 18 database run on Northflank's **Free Developer Sandbox**
-in London, each with 0.2 shared vCPU and 512 MB RAM. Database storage is 6 GB persistent.
-See [deployment instructions](deploy/northflank.md). The functional burst passed, but the completed
-strict run returned **410 gateway 503s**. This does **not** meet the submission gate.
-The attempted HTTP/2 configuration also failed and is not the recommended deployment.
+The public gateway, application and private PostgreSQL 18 database run on Northflank's
+**Free Developer Sandbox** in London. Each has 0.2 shared vCPU and 512 MB RAM; database
+storage is 6 GB persistent. This uses the two included free services and one free database.
+The dedicated HTTP/2 proxy keeps the reservation queue's memory separate from Java.
+See [deployment and local two-service instructions](deploy/northflank.md).
 
-The Sandbox is described as always on; no 30-day database expiry is shown for this deployment.
-This does not guarantee indefinite availability. Check readiness before sharing the URL.
-The admin credential is provided privately; `/auth/token` creates evaluator user tokens as shown above.
+The strict public run on `fb52455` passed: 20,000 stampede attempts, retries disabled,
+zero 5xx/transport failures/429s, and complete state/counter reconciliation. Its measured
+peak was 19,999 outstanding client HTTP attempts and the stampede took 123.865 seconds.
+The deployment prioritizes correct completion over short response times on fractional CPU.
+Full results and earlier failed configurations are retained in [VERIFICATION.md](VERIFICATION.md).
+
+Sandbox compute is described as always on; no 30-day database expiry is shown for this deployment.
+An explicit app stop/resume recovered in 68.41 seconds with data and idempotency intact.
+Check readiness before sharing the URL. The admin credential is provided privately;
+`/auth/token` creates evaluator user tokens as shown above.
 
 ## Alternative deployment: Render (previous test environment)
 

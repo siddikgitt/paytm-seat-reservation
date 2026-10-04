@@ -19,5 +19,22 @@
   "gateway_memory_peak_bytes": 338161664,
   "gateway_memory_events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n",
   "app_memory_peak_bytes": 233115648,
-  "app_memory_events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n"
+  "app_memory_events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n",
+  "isolated_database_outage": {
+    "readiness_down": {
+      "status": "503",
+      "seconds": 2.974,
+      "curl_exit": 0
+    },
+    "liveness": {
+      "status": "200",
+      "seconds": 0.082,
+      "curl_exit": 0
+    },
+    "readiness_recovered": {
+      "status": "200",
+      "seconds": 0.077,
+      "curl_exit": 0
+    }
+  }
 }

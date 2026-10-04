@@ -1,0 +1,37 @@
+{
+  "result": "PASS",
+  "commit": "fb52455853a137af080ef867b0980999437bcbc7",
+  "source": "fresh public GitHub checkout, clean working tree",
+  "command": "docker compose -p paytm-final-clean -f docker-compose.yml -f compose.gateway.yml up --build -d",
+  "docker_layer_cache_used": true,
+  "checks": {
+    "/readyz": {
+      "http_status": 200,
+      "body": {
+        "status": "UP",
+        "components": {
+          "database": {
+            "status": "UP",
+            "details": {
+              "latency_ms": 89
+            }
+          },
+          "readinessState": {
+            "status": "UP"
+          }
+        }
+      }
+    },
+    "/livez": {
+      "http_status": 200,
+      "body": {
+        "status": "UP",
+        "components": {
+          "livenessState": {
+            "status": "UP"
+          }
+        }
+      }
+    }
+  }
+}

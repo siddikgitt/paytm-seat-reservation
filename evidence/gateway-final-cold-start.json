@@ -1,0 +1,66 @@
+{
+  "result": "PASS",
+  "revision": "fb52455853a137af080ef867b0980999437bcbc7",
+  "operation": "Explicit Northflank application pause to zero instances and resume; database and gateway retained",
+  "idle_wake_test": false,
+  "paused_gateway_readiness": [
+    {
+      "status": "503",
+      "curl_exit": 0
+    }
+  ],
+  "recovery_samples": [
+    {
+      "seconds_since_resume": 15.53,
+      "status": "000",
+      "curl_exit": 28
+    },
+    {
+      "seconds_since_resume": 22.57,
+      "status": "000",
+      "curl_exit": 28
+    },
+    {
+      "seconds_since_resume": 29.6,
+      "status": "000",
+      "curl_exit": 28
+    },
+    {
+      "seconds_since_resume": 36.63,
+      "status": "000",
+      "curl_exit": 28
+    },
+    {
+      "seconds_since_resume": 43.71,
+      "status": "000",
+      "curl_exit": 28
+    },
+    {
+      "seconds_since_resume": 50.74,
+      "status": "000",
+      "curl_exit": 28
+    },
+    {
+      "seconds_since_resume": 57.77,
+      "status": "000",
+      "curl_exit": 28
+    },
+    {
+      "seconds_since_resume": 64.81,
+      "status": "000",
+      "curl_exit": 28
+    },
+    {
+      "seconds_since_resume": 68.41,
+      "status": "200",
+      "curl_exit": 0
+    }
+  ],
+  "gateway_pod_before_and_after": "seat-gateway-8577dfc66-48ldt",
+  "gateway_restarted": false,
+  "old_app_pod": "seat-reservation-5fc8c44dc4-jq5r9",
+  "new_app_pod": "seat-reservation-5957686b7f-vpcvl",
+  "reservation_and_idempotency_persisted": true,
+  "liveness_after_recovery": "UP",
+  "note": "Samples retain timeout failures during cold start; recovery observed 68.41 seconds after clicking Resume."
+}

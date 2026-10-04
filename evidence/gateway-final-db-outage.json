@@ -1,0 +1,53 @@
+{
+  "result": "PASS",
+  "commit": "fb52455853a137af080ef867b0980999437bcbc7",
+  "environment": "isolated clean-checkout Docker Compose PostgreSQL 18",
+  "outage_readiness": {
+    "status": 503,
+    "seconds": 2.03,
+    "body": {
+      "status": "DOWN",
+      "components": {
+        "database": {
+          "status": "DOWN",
+          "details": {
+            "error": "PSQLException"
+          }
+        },
+        "readinessState": {
+          "status": "UP"
+        }
+      }
+    }
+  },
+  "outage_liveness": {
+    "status": 200,
+    "seconds": 0.003,
+    "body": {
+      "status": "UP",
+      "components": {
+        "livenessState": {
+          "status": "UP"
+        }
+      }
+    }
+  },
+  "recovered_readiness": {
+    "status": 200,
+    "seconds": 0.012,
+    "body": {
+      "status": "UP",
+      "components": {
+        "database": {
+          "status": "UP",
+          "details": {
+            "latency_ms": 8
+          }
+        },
+        "readinessState": {
+          "status": "UP"
+        }
+      }
+    }
+  }
+}

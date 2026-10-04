@@ -1,9 +1,127 @@
 # Verification evidence
 
-Submission status: **not ready for HR**. The public service is deployed, but the strict capacity gate has not passed.
-No local result establishes public capacity.
+Submission status: **acceptance checks passed on October 5, 2026**. Final public strict and functional bursts, restart persistence, database outage recovery, clean-checkout Docker startup, Maven and verifier tests passed.
+Public capacity results below come from the deployed gateway URL.
 
-## Northflank migration and HTTP/2 repair
+## Final deployment — revision `fb52455`
+
+Tested on October 5, 2026 (Asia/Kolkata), with Java 21.0.8 on macOS and a 2 GiB
+client heap. Public entrypoint: [readiness](https://p01--seat-gateway--wlpk4pp6vqpm.code.run/readyz).
+The free Northflank topology is described below. Gateway and app were both on
+`fb52455853a137af080ef867b0980999437bcbc7`; no deployment occurred during load.
+
+- [Strict public burst](evidence/gateway-final-public-strict.txt), run `2lbgsi`: **PASS**.
+  Command: `JAVA_TOOL_OPTIONS=-Xmx2g STRICT=true ./burst.sh <public-api>` with
+  `ADMIN_KEY` exported privately. 20,000 stampede tasks, concurrency 20,000,
+  zero retries. Peak outstanding HTTP attempts was **19,999**; this is not a
+  claim that all 20,000 arrived at the server at exactly the same instant.
+- All 23,034 reservation attempts reconciled: 1,672 confirmations, 122 replays,
+  21,223 seat-taken declines, 16 quota declines, one key-reuse decline.
+  **Zero 5xx, transport errors or 429s** across all 26,157 HTTP attempts after
+  readiness. All 26,158 responses including readiness negotiated HTTP/2.
+- Hot seat: one `201`, 499 `409`s. Five hot seats: five `201`s, 2,495 `409`s.
+  Same-key race: one creation, 19 identical replays. Quota race: exactly four
+  seats for the limit-four user. Spoofing, owner-only cancellation and rebooking passed.
+- **109 live snapshots** passed; final ledger and API agreed on 154 available +
+  1,846 confirmed = 2,000. Required counters and available-seat gauge matched exactly.
+- Stampede duration **123.865 seconds**, about **161 requests/sec**; maximum
+  client reservation latency 123.536 seconds. These are reproducible measurements
+  on fractional free CPU, not a promise of low latency or 20,000 requests/sec.
+- [Eight independent readiness probes](evidence/gateway-final-strict-health.json)
+  during the stampede all returned 200, in 1.30–2.32 seconds.
+- [Cold restart](evidence/gateway-final-cold-start.json): **PASS**. Explicitly
+  paused the application to zero instances while retaining PostgreSQL and the
+  gateway. Paused readiness returned 503. After Resume, public readiness recovered
+  in **68.41 seconds** without restarting the gateway; liveness returned UP.
+  [Original reservation, idempotency and counts persisted](evidence/gateway-final-cold-persistence.txt).
+  This is explicit stop/resume recovery, not an idle-wake measurement.
+- [Final live-log recording](evidence/gateway-final-live-logs.mp4): 21 frames at
+  one frame per second, captured during strict run `2lbgsi`, including the deployed
+  revision and actual confirmations/declines with correlation IDs. No credentials.
+- [Functional public burst](evidence/gateway-final-public-functional.txt), run `2lgrs5`:
+  **PASS**, concurrency 1,000, 20,000 stampede attempts. Default retry budget five;
+  no 429 or retry occurred. All 23,034 reservation attempts reconciled: 1,664
+  confirmations, 103 replays, 21,245 seat-taken, 21 quota, one key-reuse decline.
+  Zero 5xx or transport errors; **108 live snapshots** passed. Final inventory:
+  154 available + 1,846 confirmed = 2,000. All counters and client ledger matched.
+  Stampede 119.861 seconds (about 167 requests/sec); peak 1,001 outstanding
+  attempts including state polling. All 26,157 responses used HTTP/2.
+
+## Dedicated free gateway — revision `c8938d7`
+
+Public API: https://p01--seat-gateway--wlpk4pp6vqpm.code.run
+
+Northflank Free Developer Sandbox, London: two services (HAProxy gateway and Java
+application) plus private TLS PostgreSQL 18. Each runtime uses 0.2 shared vCPU /
+512 MB; PostgreSQL has 6 GB persistent storage. Both services and the database
+are marked Free. Gateway image: official HAProxy 3.2 Alpine (3.2.25 in the local
+protocol test), using 16 KB buffers without a hard buffer-count cap. The same
+application and transaction implementation remains behind it. This uses the
+second included free service, with no paid upgrade.
+
+- [Public strict burst](evidence/gateway-public-strict.txt), run `2kduhe`: **PASS**.
+  Server/gateway/client code `c8938d7`, Java 21.0.8/macOS, 2 GiB client heap.
+  Command: `JAVA_TOOL_OPTIONS=-Xmx2g STRICT=true ./burst.sh <public-api>` with
+  `ADMIN_KEY` exported privately. 20,000 stampede tasks released together,
+  concurrency configured at 20,000, retries disabled. Measured peak outstanding
+  HTTP attempts: **19,989**; tasks can finish while the start gate is releasing others.
+- Across 23,034 reservation attempts: 1,681 confirmations, 129 identical replays,
+  21,208 seat-taken declines, 15 quota declines and one key-reuse decline.
+  **Zero 5xx, transport failures or 429s**, including all setup requests and probes.
+  All 26,148 responses including readiness negotiated HTTP/2.
+- Hot seat: exactly one `201` and 499 `409`s. Five-seat storm: five `201`s and
+  2,495 `409`s. Same-key race: one creation and 19 replays; altered seats rejected.
+  Quota race: four confirmed seats for the limit-four user. Identity spoofing,
+  owner-only cancellation and safe rebooking passed.
+- All **99 live state snapshots** passed. Final client ledger and API agreed:
+  153 available + 1,847 confirmed = 2,000. Every required business counter and
+  available-seat gauge matched the observed responses.
+- Main 20,000-attempt stampede: **103.583 seconds**, approximately 193 requests/sec;
+  maximum client reservation latency 103.424 seconds. This is measured throughput
+  on this free deployment, not a promise of 20,000 requests per second or low latency.
+- Eight [independent readiness probes](evidence/gateway-strict-health.json) during
+  load all returned 200. No failed health sample was discarded.
+- [Focused local diagnostic](evidence/separate-gateway-local.json): 20,000 HTTP/2
+  attempts produced one winner and 19,999 declines, no transport failures. Proxy
+  peak 338,161,664 bytes (322.50 MiB); application peak 233,095,168 bytes (222.30 MiB).
+  Neither 512 MiB container was OOM-killed. This is separate from the full public gate.
+  Pausing its isolated database produced readiness 503 in 2.974 seconds, liveness
+  200, and readiness 200 after recovery through the new gateway.
+- [Compose overlay startup](evidence/gateway-compose-startup.json): the documented
+  two-service setup builds and starts with PostgreSQL 18; gateway readiness/live
+  both return UP. The earlier fresh public clone proof remains below.
+- [Live structured-log recording](evidence/gateway-live-logs.mp4): 20 seconds at
+  one frame per second during public strict run `2kduhe`, actual application logs
+  with synthetic user identifiers, correlation IDs, reservations and declines.
+
+- [Public functional burst](evidence/gateway-public-functional.txt), run `2kjs67`,
+  same `c8938d7` deployment: **PASS**, concurrency 1,000. The default retry budget
+  was enabled but no 429 or retry occurred. All 23,034 reservation attempts,
+  90 live state snapshots and business counters reconciled; final inventory was
+  154 available + 1,846 confirmed = 2,000. Zero 5xx or transport failures.
+  The main stampede took 99.046 seconds (about 202 requests/sec).
+- [Maven suite](evidence/gateway-final-maven.txt): **12 tests passed**, including
+  fractional numeric rejection, effective Testcontainers connection readiness,
+  isolated database outage/liveness/recovery, atomic booking and authorization.
+  Colima command: `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock ./mvnw -B test`.
+- [Verifier suite](evidence/gateway-final-verifier.txt): **27 normal + 27 strict
+  checks passed**. Missing metrics, inconsistent counters, failed state polling,
+  unexpected responses and strict overload all fail verification.
+- Final DNS-fix revision `fb52455`: [clean public checkout](evidence/gateway-clean-checkout.json)
+  built and started both Docker services and PostgreSQL 18, using Docker layer
+  caching; readiness and liveness returned UP. [Isolated database outage check](evidence/gateway-final-db-outage.json)
+  again returned readiness 503 while liveness remained 200, then recovered to 200.
+- The first [cold-start check](evidence/gateway-cold-start-initial-failed.json)
+  found a stale gateway DNS address after application pause/resume. Commit
+  `fb52455` adds runtime DNS refresh and uses the application's canonical private
+  hostname. The [local regression](evidence/gateway-dns-recovery.json) changes
+  the app IP while retaining the gateway container, verifies automatic recovery,
+  and confirms the original reservation and idempotency response persist.
+
+Earlier failures below are retained as historical experiments, not the current
+public capacity result.
+
+## Earlier single-container Northflank experiments
 
 The current candidate is https://p01--seat-reservation--wlpk4pp6vqpm.code.run,
 on Northflank's Free Developer Sandbox in London. Application and PostgreSQL 18

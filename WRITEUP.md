@@ -163,78 +163,40 @@ arguments to review against the code, not a claim that I implemented or verified
 The interview will require me to explain and extend this work; AI-generated documentation is not a substitute
 for that understanding. No unsupported performance result or personal design contribution is claimed here.
 
-### Observed free-tier limit
+### Deployment investigation and measured result
 
-The strict public test did not meet the assignment's acceptance bar. Render reported a five-second HTTP
-health-check timeout under the burst, and the run recorded gateway errors, transport failures, and counter
-resets. The database-backed final seat counts still added up, but that alone is not a passing result.
-The exact counts and client-ledger discrepancy are retained in VERIFICATION.md.
+After Render's public load failures, I asked Codex to try alternative free hosting
+and completed the account onboarding, card verification and GitHub access steps.
+Codex tested Northflank, diagnosed the HTTP/2 buffer requirement, and designed the
+separate-proxy deployment. These were AI-led decisions and implementation work.
 
-The completion pass initially bounded Tomcat to 512 open connections to protect memory.
-That setting also delayed probes during the normal 1,000-in-flight run, so the final bound is 2,048; a local
-512 MB / 0.5 CPU full functional burst passed at that setting with about 425 MB resident usage. No OOM occurred in that functional test; this does not establish strict-load capacity. Additional connections queue upstream. The readiness database connection
-is independent of the pool; the HTTP request still shares the server's connector and CPU. A saturated connector
-can delay the platform's health probe even when Postgres is reachable. This is a remaining availability and
-capacity limitation, not something the idempotency key or SQL locks solve. No paid capacity was used.
+The final topology uses Northflank's two included free services: a dedicated
+HAProxy gateway and the Java application, each with 0.2 shared vCPU / 512 MB, plus
+private PostgreSQL 18. The gateway accepts HTTP/2 and queues before forwarding
+at most 64 writes concurrently. Read and health connections have separate limits.
+It forwards authentication and API responses unchanged, performs no retries, and
+never decides or fabricates a reservation outcome. The embedded application proxy
+keeps its original defaults. The database transaction still makes every sale.
 
-### Follow-up: queue before servlet allocation
+This separation followed measured failures: a combined Java/HTTP/2 container
+stalled with a capped buffer pool, and an uncapped local version was OOM-killed.
+A separate proxy's local peak was about 323 MiB, while the application used about
+222 MiB. The final public strict run at `fb52455` released 20,000 attempts together
+with retries disabled and passed with zero 5xx, transport failures or 429s.
+Every hot seat had one winner, quotas and idempotency held, and 109 live snapshots,
+final state, client ledger and business counters reconciled. The measured peak
+outstanding client attempts was 19,999. The stampede took 123.865 seconds; this
+trades latency for bounded memory and is not a claim of 20,000 requests per second.
 
-The follow-up diagnosis separated intermittent connection reuse failures from overload. The application had a
-two-second keep-alive timeout, shorter than the platform proxy's reuse window. The revised Docker image uses
-120-second keep-alive on both listeners and puts HAProxy before Spring. HAProxy accepts up to 24,000 client
-connections but only forwards 64 writes concurrently, with separate small pools for health/metrics and reads.
-This bounds servlet/JDBC memory while preserving all transaction, identity, quota, and idempotency decisions.
-No reservation response is synthesized, and the proxy performs no retries.
+The final restart check exposed a stale service address in HAProxy. Codex added
+runtime DNS resolution and configured the full private service hostname, then
+tested recovery with a changed application IP and an unchanged gateway.
 
-Queued requests can wait up to 480 seconds on the fractional-CPU instance. Queue plus backend deadlines stay
-below the strict load client's 600-second deadline. This explicitly trades latency for completing the same
-20,000 concurrent attempts. The revised image gives the JVM 35% of container memory so the ingress queue can
-share the same 512 MB limit. Both processes stop if either dies; readiness still queries the real database.
-
-A local comparison at 512 MB / 0.1 CPU found normal tiered compilation slower on the first burst and more
-memory-hungry than the C1 setting, so C1 was retained. The short 180-second prototype queue expired requests;
-those failed results are retained. The 480-second queue passed the constrained local strict burst and the
-public functional burst. The strict public run still produced 1,214 server errors and 10,434 reservation 429s,
-with one seat-taken counter discrepancy. Application overload shedding stayed at zero and Render reported no
-new restart. This isolates a remaining public hosting-path limitation without proving the source of every
-upstream error. Six of 107 separate local readiness probes also failed under the tight CPU cap.
-No passing submission is claimed. Codex designed and implemented this follow-up; it is part of the AI-led work.
-
-### Locating the remaining upstream failures
-
-Revision `a96bf0f` adds an attribution-only `X-Seat-Ingress` response header at HAProxy and bounded
-load-client diagnostics. The client logs allowlisted response headers and error-page classifications,
-never tokens, cookies, request bodies, or full error HTML. All original failure checks remain active.
-A repeat public strict run returned HTTP 429 with `cf-mitigated: challenge` and HTML challenge content,
-without the ingress marker. This identifies actual Cloudflare challenges outside the reservation API;
-other plain-text 429s and gateway errors also lacked the marker. Healthy replies include it.
-Cloudflare documents this challenge signal in its
-[response detection guide](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/),
-and Render documents its [Cloudflare-backed protection](https://render.com/docs/ddos-protection).
-Missing markers alone do not prove the exact cause of every gateway error (very early HTTP parsing failures
-can precede the HAProxy response rule). Provider correlation IDs are retained for diagnosis.
-
-The same investigation exposed a Java 21 client deadline gap: a partial body can outlive
-`HttpRequest.timeout`. The verifier now bounds the complete response future and cancels it on expiry;
-a regression fixture proves the timeout without accepting or retrying that failure. This is a verifier
-reliability fix, not evidence that the hosting gate passed. The diagnostic public run was incomplete and
-is explicitly marked aborted. The previous complete failures are retained.
-
-### Alternative free hosting investigation
-
-After the Render failures, I asked Codex to try other free hosting. Northflank's free
-Sandbox was provisioned after I completed onboarding, card verification and GitHub
-access approval. Both the application and PostgreSQL use 0.2 shared vCPU / 512 MB.
-The public functional run passed with zero 5xx or transport failures and full
-reconciliation. The strict run still returned 410 gateway 503s, although state and
-business counters reconciled. No strict-load pass is claimed.
-
-Codex also diagnosed the 16 KB minimum buffer requirement for HTTP/2, implemented
-configurable HAProxy buffers, and tested the change. A capped buffer pool stalled
-under public strict load; an uncapped local HTTP/2 experiment was OOM-killed at
-512 MiB. The HTTP/1.1 upstream configuration remains the supported free deployment.
-These experiments distinguish functional correctness from insufficient demonstrated
-public capacity. Exact results and evidence are retained in VERIFICATION.md.
+The same work hardened Java's complete-response deadline after a partial body
+outlived the request timeout, and added safe gateway-response attribution.
+Earlier failed and incomplete experiments remain in [VERIFICATION.md](VERIFICATION.md)
+with exact environments, commands, outcomes, readiness and persistence checks.
+No paid capacity or platform-protection bypass was used.
 
 ## 7. Possible extensions
 

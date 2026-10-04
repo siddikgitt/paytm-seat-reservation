@@ -1,0 +1,97 @@
+Picked up JAVA_TOOL_OPTIONS: -Xmx2g
+Burst run=2lgrs5 target=https://p01--seat-gateway--wlpk4pp6vqpm.code.run concurrency=1000 stampede=20000 hot_users=500 users=2000 hall=20x100
+strict=false retries_429=5
+waiting for https://p01--seat-gateway--wlpk4pp6vqpm.code.run/readyz (cold start allowed) ready
+show 673e73c1-76ba-46e3-8f65-27d59fb6b6b5 created with 2000 seats
+minting 3000 user tokens ...
+running Phase 1: hot-seat storm, 500 users -> A12 ...
+running Phase 2: 5 hot seats x 500 users ...
+running Phase 3: stampede 20000 reserves (10% duplicated retries) ...
+   invariant checked on 108 live snapshots during the stampede
+running Phase 4: same idempotency key x20 in parallel ...
+running Phase 5: one user, 10 parallel reserves, limit 4 ...
+   greedy user ends with 4 seats (limit 4)
+
+================ OUTCOME DISTRIBUTION ================
+
+== Phase 1: hot-seat storm, 500 users -> A12  (500 requests in 2736 ms, 183 req/s)
+   201 confirmed                            1
+   409 seat_taken                         499
+   latency ms  p50=1519.6  p95=2610.7  p99=2700.2  max=2703.9
+
+== Phase 2: 5 hot seats x 500 users  (2500 requests in 14394 ms, 174 req/s)
+   201 confirmed                            5
+   409 seat_taken                        2495
+   latency ms  p50=7263.9  p95=13863.3  p99=14343.4  max=14370.9
+
+== Phase 3: stampede 20000 reserves (10% duplicated retries)  (20000 requests in 119861 ms, 167 req/s)
+   200 idempotent replay                   84
+   201 confirmed                         1650
+   409 per_user_limit                      15
+   409 seat_taken                       18251
+   latency ms  p50=64201.5  p95=115163.1  p99=118869.6  max=119771.5
+
+== Phase 4: same idempotency key x20 in parallel  (21 requests in 244 ms, 86 req/s)
+   200 idempotent replay                   19
+   201 confirmed                            1
+   409 idempotency_key_reused               1
+   latency ms  p50=224.8  p95=242.3  p99=243.4  max=243.4
+
+== Phase 5: one user, 10 parallel reserves, limit 4  (10 requests in 207 ms, 48 req/s)
+   201 confirmed                            4
+   409 per_user_limit                       6
+   latency ms  p50=196.3  p95=206.7  p99=206.7  max=206.7
+
+== Phase 6: spoofing, owner-only cancel, rebook  (6 requests in 0 ms, 0 req/s)
+   200 ok                                   2
+   201 confirmed                            3
+   404 not_found                            1
+   latency ms  p50=190.6  p95=195.2  p99=195.2  max=195.2
+
+== Cold-start readiness attempts (before burst)  (1 requests in 0 ms, 0 req/s)
+   200 ok                                   1
+   latency ms  p50=836.5  p95=836.5  p99=836.5  max=836.5
+
+== Every HTTP attempt after readiness (including setup, probes and retries)  (26156 requests in 0 ms, 0 req/s)
+   200 idempotent replay                  103
+   200 ok                                3120
+   201 confirmed                         1665
+   404 not_found                            1
+   409 idempotency_key_reused               1
+   409 per_user_limit                      21
+   409 seat_taken                       21245
+   latency ms  p50=46613.5  p95=113569.7  p99=118575.2  max=119771.5
+
+== Every reservation HTTP attempt  (23034 requests in 0 ms, 0 req/s)
+   200 idempotent replay                  103
+   201 confirmed                         1664
+   409 idempotency_key_reused               1
+   409 per_user_limit                      21
+   409 seat_taken                       21245
+   latency ms  p50=55906.3  p95=114369.2  p99=118753.4  max=119771.5
+Peak outstanding HTTP attempts: 1001
+Negotiated response protocols: {HTTP_2=26157}
+Failure attribution (all HTTP attempts):
+
+== TOTAL
+   200 idempotent replay                  103
+   200 ok                                   2
+   201 confirmed                         1664
+   404 not_found                            1
+   409 idempotency_key_reused               1
+   409 per_user_limit                      21
+   409 seat_taken                       21245
+   5xx + transport errors                   0
+   429 shed then retried (same key)         0
+
+================ RECONCILIATION ================
+   GET /shows: available=154 held=0 confirmed=1846 total=2000  (sum=2000)
+   seats in live reservations returned to us: 1846  vs confirmed in API: 1846
+   reservations_confirmed_total delta=1664 client=1664
+   reservations_declined_total{reason="seat_taken"} delta=21245 client=21245
+   reservations_declined_total{reason="per_user_limit"} delta=21 client=21
+   reservations_declined_total{reason="idempotent_replay"} delta=103 client=103
+   reservations_declined_total{reason="idempotency_key_reused"} delta=1 client=1
+   seats_available=154.0 API=154
+
+PASS: no double-sell, no 5xx, invariant held, idempotency and per-user limit held.
