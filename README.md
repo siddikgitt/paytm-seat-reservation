@@ -4,7 +4,11 @@ A JSON HTTP service that sells assigned seats for a show and stays correct under
 no seat is ever sold twice, no user exceeds their per-show limit, and a retried request never books twice.
 Java 21 + Spring Boot 3.3 (virtual threads) + PostgreSQL 16. Design notes are in [WRITEUP.md](WRITEUP.md).
 
-**Live URL:** `https://<your-service>.onrender.com` (fill in after deploying, see [Deploy to Render](#deploy-to-render))
+**Submission status:** local verification in progress; public deployment and live evidence are not yet verified.
+
+**Repository:** publishing in progress.
+
+**Live URL:** not deployed yet. See [Deploy to Render](#deploy-to-render).
 
 | What | Where |
 |---|---|
@@ -32,7 +36,8 @@ No JDK is needed locally: `burst.sh` falls back to running the single-file burst
 
 ## API
 
-All bodies are JSON with `snake_case` fields. Money is integer paise.
+All bodies are JSON with `snake_case` fields. Money is integer paise. Decimal JSON numbers (including `25000.0`)
+are rejected for `price_paise` and `per_user_limit`, rather than rounded or truncated.
 
 ### Tokens (stand-in identity provider)
 
@@ -122,33 +127,32 @@ It prints the outcome distribution per phase and in total (status and reason), l
 It exits non-zero on any violation.
 
 Tunables (environment variables): `CONCURRENCY` (1000), `STAMPEDE` (20000), `HOT_USERS` (500), `USERS` (2000),
-`ROWS`x`COLS` (20x100), `RETRY_PCT` (10), `RETRIES_429` (5), `ADMIN_KEY`.
+`ROWS`x`COLS` (20x100), `RETRY_PCT` (10), `RETRIES_429` (5), `ADMIN_KEY`, `STRICT` (false).
 
-### Measured results
+### Verification status
 
-These runs used the same image, with Docker CPU and memory limits matching the Render plans and the burst running
-in-network. Full default burst (23,037 requests), all **PASS**.
+The previous draft contained performance figures without retained evidence. Those figures have been removed.
+Verified runs, exact commits, commands, and limitations are recorded in [VERIFICATION.md](VERIFICATION.md).
+A local run is not proof that the public deployment meets the grading bar.
 
-| Limits | Startup | Stampede throughput | 5xx | 429 shed |
-|---|---|---|---|---|
-| 0.5 CPU / 512 MB (Render Starter) | 2.4 s | ~1,550 req/s | 0 | 0 |
-| 0.1 CPU / 512 MB (Render Free) | 43 s | ~80 req/s | 0 | 0 |
+### Strict grading mode
 
-Sample tail (0.5 CPU):
+```bash
+ADMIN_KEY=... STRICT=true ./burst.sh https://YOUR-LIVE-SERVICE.onrender.com
+# equivalent: ADMIN_KEY=... make burst-strict URL=https://YOUR-LIVE-SERVICE.onrender.com
 ```
-== TOTAL
-   200 idempotent replay                  110
-   201 confirmed                         1685
-   409 per_user_limit                      23
-   409 seat_taken                       21215
-   5xx + transport errors                   0
-================ RECONCILIATION ================
-   GET /shows: available=154 held=0 confirmed=1846 total=2000  (sum=2000)
-   seats in live reservations returned to us: 1846  vs confirmed in API: 1846
-   metrics delta: confirmed=1685 (client saw 1685 201s)  seat_taken=21215 (client 21215) ...
-   gauge seats_available=154.0  vs API available=154
-PASS: no double-sell, no 5xx, invariant held, idempotency and per-user limit held.
-```
+
+Strict mode forces 20,000 stampede tasks, permits 20,000 simultaneous HTTP attempts, and disables 429 retries,
+even if conflicting environment variables are supplied. Tasks wait behind a common start gate. The script reports
+peak outstanding client HTTP attempts; this is not a claim that every connection reached the server simultaneously.
+A 429 or any unexpected outcome fails strict verification. Cold-start readiness attempts are counted separately
+from the burst, which begins once the service is ready. Every subsequent HTTP attempt is counted, including
+state polls, setup requests, and intermediate retry responses.
+
+Metrics are mandatory: missing metrics, missing counters, counter deltas that disagree with reservation responses,
+and an available-seat gauge that disagrees with the API all fail the run. Run against one isolated instance without
+other reservation traffic, because the business counters are process-wide. A restart during the run also invalidates
+counter reconciliation. Failed or malformed state polls fail verification; at least one valid live snapshot is required.
 
 ## Observability
 
@@ -186,8 +190,8 @@ response bodies.
 ```
 
 On Render the logs are under the service's **Logs** tab and can be searched with `request_id:` / `reason:`
-terms. Render logs are not publicly shareable, so the submission includes a screen recording of the live log
-stream during a burst.
+terms. A recording of the deployed log stream during a burst is required for the submission.
+Its verified link will be recorded in VERIFICATION.md; until then this deliverable is pending.
 
 ### Health
 
@@ -208,7 +212,7 @@ stream during a burst.
 
 Plan notes:
 - The **free** web plan sleeps after 15 idle minutes and has about 0.1 CPU. The first request after sleep waits
-  for a cold start of about 45s. A burst still passes with zero 5xx, but slowly (see the table above).
+  for a cold start of about 45s. Public burst capacity must be measured; local results do not establish free-tier capacity.
 - **Starter** is always on with 0.5 CPU and is recommended for the grading window: change `plan: free` to
   `plan: starter`, or switch it in the dashboard.
 - Free Render Postgres expires after 30 days.
@@ -236,6 +240,10 @@ unchanged on Railway, Fly or Neon.
 ```bash
 make test         # Maven + Testcontainers inside Docker (no local JDK)
 make test-local   # ./mvnw test with a local JDK 21
+make test-burst   # negative checks for the burst verifier, in normal and strict modes
+
+# Colima: Ryuk needs the Docker socket path inside the Linux VM
+TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock make test-local
 ```
 [ReservationConcurrencyTest](src/test/java/com/paytm/seats/ReservationConcurrencyTest.java) drives the real HTTP
 API against a real Postgres. It covers a 300-user hot-seat storm, overlapping multi-seat requests in random order

@@ -1,0 +1,6 @@
+.git
+target
+.env
+*.log
+.DS_Store
+private-submission/

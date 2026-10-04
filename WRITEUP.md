@@ -143,32 +143,24 @@ answered with one query on the request id the client got back.
 
 ## 6. AI usage (directed vs decided)
 
-> **Author note:** this section is a draft produced while building with an AI coding agent. Edit it so it states
-> what *you* decided. The interviewers will ask you to extend the service live.
+This was an AI-led implementation. AI coding assistance produced the initial service, SQL design, tests,
+load generator, deployment configuration, and draft documentation. The existing project used Java 21,
+Spring Boot, PostgreSQL, and a Render blueprint. I am not claiming to have independently designed the locking
+or idempotency mechanism, or personally made every decision in the initial implementation.
 
-Tools: Cursor's agent (Claude) for planning, code generation, test writing, debugging, and running Docker builds
-and load tests.
+For the completion pass I asked OpenAI Codex to compare the repository against the assignment, repair gaps,
+verify the running service, preserve incremental commits, and prepare the submission. I selected GitHub + Render,
+a free-only hosting budget, and an explicit AI-led disclosure.
 
-- **Directed by me:** the stack (Java 21 / Spring Boot / Postgres) and the platform (Render), chosen as what I
-  would extend fastest in an interview. Committing incrementally. Treating correctness under the burst, rather than
-  features, as the bar.
-- **Proposed by the AI, reviewed and accepted by me:** <!-- edit: say which of these you reviewed or changed -->
-  - the guarded-UPDATE plus ordered `FOR UPDATE` design
-  - the reservation row as the idempotency record (unique key plus request hash)
-  - the conditional upsert for the per-user quota
-  - `200` for replays so that one seat yields exactly one `201`
-  - the single-snapshot precheck
-  - the dedicated-connection readiness check
-- **Found by running the real thing:** each of these came from a measurement, not a guess.
-  - Testcontainers 1.19 can't talk to Docker Engine 29 (API 1.32 is too old), so I pinned 1.21.4.
-  - Under a 0.1 CPU / 512 MB limit matching Render free:
-    - Startup took 195s. AppCDS plus C1-only JIT brought it to about 43s.
-    - The container was OOM-killed. Capping heap, metaspace, code cache and direct memory fixed it.
-    - Pool-borrow timeouts surfaced as `500`. They are now mapped to `503`, a bulkhead now sheds with `429`
-      before touching state, and collapsing three precheck queries into one plus caching verified JWTs took the
-      throttled burst from 5,657 server errors to 0.
-- **What I would not delegate:** the correctness argument in sections 1 and 2, which I can reproduce on a
-  whiteboard. <!-- edit -->
+Codex identified a readiness failure caused by reading datasource properties instead of the active connection
+details, decimal-to-integer JSON coercion, and burst verification that could overlook missing or inconsistent metrics.
+It implemented focused fixes, database outage/recovery and numeric validation tests, and a strict burst mode that
+cannot hide 429s with retries. The retained results and deployment limitations are in VERIFICATION.md.
+
+AI also drafted the correctness explanation and operational recommendations in this document. These are design
+arguments to review against the code, not a claim that I implemented or verified them without assistance.
+The interview will require me to explain and extend this work; AI-generated documentation is not a substitute
+for that understanding. No unsupported performance result or personal design contribution is claimed here.
 
 ## 7. What I'd do next
 
