@@ -53,11 +53,12 @@ public class Burst {
     static final Stats reserveAttempts = new Stats("Every reservation HTTP attempt");
     static final AtomicInteger activeHttp = new AtomicInteger();
     static final AtomicInteger peakHttp = new AtomicInteger();
+    static final Map<String, LongAdder> protocols = new ConcurrentHashMap<>();
     static volatile boolean warmingUp = true;
     static final String RUN = Long.toString(System.currentTimeMillis() % 1_000_000_000L, 36);
 
     static final HttpClient http = HttpClient.newBuilder()
-            .version(HttpClient.Version.HTTP_1_1)
+            .version(HttpClient.Version.HTTP_2)
             .connectTimeout(Duration.ofSeconds(strict ? 120 : 20))
             .executor(Executors.newVirtualThreadPerTaskExecutor())
             .build();
@@ -320,6 +321,7 @@ public class Burst {
         attempts.print();
         reserveAttempts.print();
         System.out.println("Peak outstanding HTTP attempts: " + peakHttp.get());
+        System.out.println("Negotiated response protocols: " + protocols);
         Map<String, Long> totals = new TreeMap<>();
         all.forEach(s -> s.outcomes.forEach((k, v) -> totals.merge(k, v.sum(), Long::sum)));
         System.out.println("\n== TOTAL");
@@ -582,6 +584,7 @@ public class Burst {
                 if (token != null) b.header("Authorization", "Bearer " + token);
                 headers.forEach(b::header);
                 HttpResponse<String> resp = http.send(b.build(), HttpResponse.BodyHandlers.ofString());
+                protocols.computeIfAbsent(resp.version().name(), k -> new LongAdder()).increment();
                 long micros = (System.nanoTime() - start) / 1000;
                 String ct = resp.headers().firstValue("Content-Type").orElse("");
                 Object parsed = ct.contains("json") && !resp.body().isEmpty() ? new Json(resp.body()).parse() : resp.body();
