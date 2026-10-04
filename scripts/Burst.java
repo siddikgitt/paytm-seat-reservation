@@ -21,6 +21,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
 
 /**
@@ -37,15 +38,22 @@ public class Burst {
 
     static String base;
     static String adminKey = env("ADMIN_KEY", "dev-admin-key");
-    static int concurrency = Integer.parseInt(env("CONCURRENCY", "1000"));
-    static int stampede = Integer.parseInt(env("STAMPEDE", "20000"));
+    static final boolean strict = Boolean.parseBoolean(env("STRICT", "false"));
+    static int concurrency = strict ? 20000 : Integer.parseInt(env("CONCURRENCY", "1000"));
+    static int stampede = strict ? 20000 : Integer.parseInt(env("STAMPEDE", "20000"));
     static int hotUsers = Integer.parseInt(env("HOT_USERS", "500"));
     static int users = Integer.parseInt(env("USERS", "2000"));
     static int rows = Integer.parseInt(env("ROWS", "20"));
     static int cols = Integer.parseInt(env("COLS", "100"));
     static int retryPct = Integer.parseInt(env("RETRY_PCT", "10"));
-    static int retries429 = Integer.parseInt(env("RETRIES_429", "5"));
+    static int retries429 = strict ? 0 : Integer.parseInt(env("RETRIES_429", "5"));
     static final LongAdder shed429 = new LongAdder();
+    static final Stats warmupAttempts = new Stats("Cold-start readiness attempts (before burst)");
+    static final Stats attempts = new Stats("Every HTTP attempt after readiness (including setup, probes and retries)");
+    static final Stats reserveAttempts = new Stats("Every reservation HTTP attempt");
+    static final AtomicInteger activeHttp = new AtomicInteger();
+    static final AtomicInteger peakHttp = new AtomicInteger();
+    static volatile boolean warmingUp = true;
     static final String RUN = Long.toString(System.currentTimeMillis() % 1_000_000_000L, 36);
 
     static final HttpClient http = HttpClient.newBuilder()
@@ -126,12 +134,18 @@ public class Burst {
             System.err.println("usage: java scripts/Burst.java <BASE_URL>");
             System.exit(2);
         }
+        if (concurrency < 1 || stampede < 1 || hotUsers < 2 || users < 1 || rows < 2 || cols < 32
+                || retryPct < 0 || retryPct > 100 || retries429 < 0) {
+            throw new IllegalArgumentException("invalid burst settings: rows >= 2, cols >= 32, positive concurrency/users required");
+        }
         base = args[0].replaceAll("/+$", "");
         inFlight = new Semaphore(concurrency);
         System.out.printf("Burst run=%s target=%s concurrency=%d stampede=%d hot_users=%d users=%d hall=%dx%d%n",
                 RUN, base, concurrency, stampede, hotUsers, users, rows, cols);
 
+        System.out.println("strict=" + strict + " retries_429=" + retries429);
         waitReady();
+        warmingUp = false;
         Map<String, Double> metricsBefore = scrapeMetrics();
 
         List<String> seats = new ArrayList<>();
@@ -175,6 +189,8 @@ public class Burst {
             long w = winsPerSeat.getOrDefault(s, new LongAdder()).sum();
             expect(w == 1, s + " must have exactly one winner, got " + w);
         }
+        expect(multiHot.count("409 seat_taken") == hotSeats.size() * (hotUsers - 1),
+                "every multi-hot loser must be 409 seat_taken");
         all.add(multiHot);
 
         // 3. General stampede, skewed to the front rows, with concurrent same-key retries
@@ -183,12 +199,7 @@ public class Burst {
         Thread poller = Thread.ofVirtual().start(() -> {
             while (!stop.get()) {
                 Res s = call("GET", "/shows/" + showId, null, null, Map.of(), false);
-                if (s.status() == 200) {
-                    snapshots.incrementAndGet();
-                    Map<?, ?> c = (Map<?, ?>) s.obj().get("counts");
-                    long sum = num(c.get("available")) + num(c.get("held")) + num(c.get("confirmed"));
-                    expect(sum == num(c.get("total")), "invariant broken mid-burst: " + c);
-                }
+                if (checkState(s, seats.size())) snapshots.incrementAndGet();
                 sleep(200);
             }
         });
@@ -211,6 +222,10 @@ public class Burst {
         stop.set(true);
         poller.join();
         System.out.println("   invariant checked on " + snapshots.get() + " live snapshots during the stampede");
+        expect(snapshots.get() > 0, "no valid state snapshots collected during stampede");
+        expect(general.count("201") + general.count("200 idempotent replay")
+                        + general.count("409 seat_taken") + general.count("409 per_user_limit") == stampede,
+                "stampede contained unexpected final outcomes");
         all.add(general);
 
         // 4. Idempotency race: one key, 20 parallel identical requests, then same key + different seats
@@ -231,8 +246,9 @@ public class Burst {
         String greedy = token(greedyId);
         Stats limit = storm("Phase 5: one user, 10 parallel reserves, limit 4", 10, i ->
                 reserve(greedy, greedyId, showId, List.of(last + (10 + i)), "greedy-" + i));
-        expect(limit.count("201") <= 4, "per-user limit exceeded: " + limit.count("201") + " confirmed");
+        expect(limit.count("201") == 4 && limit.count("409 per_user_limit") == 6, "per-user limit exceeded: " + limit.count("201") + " confirmed");
         Res mine = call("GET", "/me/reservations?show_id=" + showId, greedy, null, Map.of());
+        expect(mine.status() == 200 && mine.body() instanceof List<?>, "cannot read user reservations");
         long held = 0;
         if (mine.body() instanceof List<?> list) {
             for (Object o : list) {
@@ -240,7 +256,7 @@ public class Burst {
                 if ("confirmed".equals(m.get("status"))) held += ((List<?>) m.get("seats")).size();
             }
         }
-        expect(held <= 4, "user holds " + held + " seats, limit is 4");
+        expect(held == 4, "user holds " + held + " seats, limit is 4");
         System.out.println("   greedy user ends with " + held + " seats (limit 4)");
         all.add(limit);
 
@@ -251,9 +267,10 @@ public class Burst {
         Res spoof = call("POST", "/shows/" + showId + "/reserve", mallory,
                 "{\"seats\":[\"" + last + "30\"],\"idempotency_key\":\"spoof\",\"user_id\":\"" + victimId + "\"}", Map.of());
         record(ident, spoof, malloryId, "spoof", List.of(last + "30"));
-        expect(malloryId.equals(spoof.str("user_id")), "spoofed body user_id was honoured: " + spoof.str("user_id"));
+        expect(spoof.status() == 201 && malloryId.equals(spoof.str("user_id")), "spoofed body user_id was honoured: " + spoof.str("user_id"));
         Res vr = reserve(victim, victimId, showId, List.of(last + "31"), "v1");
         ident.add(vr);
+        expect(vr.status() == 201, "victim reserve must succeed");
         String vrid = vr.str("reservation_id");
         Res steal = call("POST", "/reservations/" + vrid + "/cancel", mallory, null, Map.of());
         ident.add(steal);
@@ -270,6 +287,7 @@ public class Burst {
         expect(rebook.status() == 201, "released seat must be re-bookable, got " + rebook.outcome());
         Res again = call("POST", "/reservations/" + vrid + "/cancel", victim, null, Map.of());
         ident.add(again);
+        expect(again.status() == 200 && "cancelled".equals(again.str("status")), "repeat cancel must be idempotent");
         String seatState = seatStatus(showId, last + "31");
         expect("confirmed".equals(seatState), "repeat cancel resurrected a seat now owned by someone else: " + seatState);
         all.add(ident);
@@ -277,6 +295,7 @@ public class Burst {
         // Final reconciliation
         sleep(2500); // let the 1s seat gauges refresh
         Res fin = call("GET", "/shows/" + showId, null, null, Map.of());
+        if (!checkState(fin, seats.size())) throw new IllegalStateException("final show state is invalid: " + fin);
         Map<?, ?> c = (Map<?, ?>) fin.obj().get("counts");
         long avail = num(c.get("available")), heldC = num(c.get("held")), conf = num(c.get("confirmed")), tot = num(c.get("total"));
         long ledgerSeats = liveReservationSeats.values().stream().mapToLong(Integer::longValue).sum();
@@ -285,11 +304,15 @@ public class Burst {
         System.out.println();
         System.out.println("================ OUTCOME DISTRIBUTION ================");
         all.forEach(Stats::print);
+        warmupAttempts.print();
+        attempts.print();
+        reserveAttempts.print();
+        System.out.println("Peak outstanding HTTP attempts: " + peakHttp.get());
         Map<String, Long> totals = new TreeMap<>();
         all.forEach(s -> s.outcomes.forEach((k, v) -> totals.merge(k, v.sum(), Long::sum)));
         System.out.println("\n== TOTAL");
         totals.forEach((k, v) -> System.out.printf("   %-34s %7d%n", k, v));
-        long fiveXX = all.stream().mapToLong(Stats::fiveXX).sum();
+        long fiveXX = attempts.fiveXX();
         System.out.printf("   %-34s %7d%n", "5xx + transport errors", fiveXX);
         System.out.printf("   %-34s %7d%n", "429 shed then retried (same key)", shed429.sum());
         expect(fiveXX == 0, fiveXX + " server errors / transport failures during the burst");
@@ -301,23 +324,7 @@ public class Burst {
         System.out.printf("   seats in live reservations returned to us: %d  vs confirmed in API: %d%n", ledgerSeats, conf);
         expect(ledgerSeats == conf, "API confirmed count disagrees with the reservations the API handed out");
 
-        if (metricsBefore != null && metricsAfter != null) {
-            double dConfirmed = delta(metricsBefore, metricsAfter, "reservations_confirmed_total");
-            double dTaken = delta(metricsBefore, metricsAfter, "reservations_declined_total{reason=\"seat_taken\"}");
-            double dLimit = delta(metricsBefore, metricsAfter, "reservations_declined_total{reason=\"per_user_limit\"}");
-            double dReplay = delta(metricsBefore, metricsAfter, "reservations_declined_total{reason=\"idempotent_replay\"}");
-            Double gauge = metricsAfter.get("seats_available{show_id=\"" + showId + "\"}");
-            System.out.printf("   metrics delta: confirmed=%.0f (client saw %d 201s)  seat_taken=%.0f (client %d)  per_user_limit=%.0f (client %d)  idempotent_replay=%.0f (client %d)%n",
-                    dConfirmed, total201.sum(), dTaken, totals.getOrDefault("409 seat_taken", 0L),
-                    dLimit, totals.getOrDefault("409 per_user_limit", 0L), dReplay, totals.getOrDefault("200 idempotent replay", 0L));
-            System.out.printf("   gauge seats_available=%s  vs API available=%d%n", gauge, avail);
-            expect(gauge != null && gauge.longValue() == avail, "seats_available gauge does not match API");
-            if (dConfirmed != total201.sum()) {
-                System.out.println("   note: counter delta differs from this client's 201s - other traffic or more than one instance?");
-            }
-        } else {
-            System.out.println("   /metrics not reachable; skipped metric reconciliation");
-        }
+        checkMetrics(metricsBefore, metricsAfter, showId, avail, reserveAttempts);
 
         System.out.println();
         if (violations.isEmpty()) {
@@ -335,17 +342,20 @@ public class Burst {
         Stats stats = new Stats(name);
         System.out.println("running " + name + " ...");
         CountDownLatch gate = new CountDownLatch(1);
+        CountDownLatch ready = new CountDownLatch(n);
         long start;
         try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<?>> fs = new ArrayList<>(n);
             for (int i = 0; i < n; i++) {
                 int idx = i;
                 fs.add(pool.submit(() -> {
+                    ready.countDown();
                     gate.await();
                     stats.add(task.apply(idx));
                     return null;
                 }));
             }
+            ready.await();
             start = System.nanoTime();
             gate.countDown();
             for (Future<?> f : fs) {
@@ -365,6 +375,7 @@ public class Burst {
             sleep(1000L + new Random().nextInt(2000));
             r = call("POST", "/shows/" + showId + "/reserve", token, body, Map.of());
         }
+        expect(r.status() != 429, "reservation retries exhausted with 429");
         if (r.status() == 201 || r.status() == 200) {
             String rid = r.str("reservation_id");
             String prev = keyToReservation.putIfAbsent(userId + "|" + key, rid);
@@ -407,12 +418,15 @@ public class Burst {
     static String[] mintTokens(int n) throws Exception {
         System.out.println("minting " + n + " user tokens ...");
         String[] out = new String[n];
+        Semaphore tokenSlots = new Semaphore(64);
         try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<?>> fs = new ArrayList<>();
             for (int i = 0; i < n; i++) {
                 int idx = i;
                 fs.add(pool.submit(() -> {
-                    out[idx] = token("u" + idx);
+                    tokenSlots.acquire();
+                    try { out[idx] = token("u" + idx); }
+                    finally { tokenSlots.release(); }
                     return null;
                 }));
             }
@@ -461,6 +475,46 @@ public class Burst {
         return m;
     }
 
+    static boolean checkState(Res response, long total) {
+        if (response.status() != 200 || !(response.obj().get("counts") instanceof Map<?, ?> c)) {
+            expect(false, "state poll failed: " + response.outcome());
+            return false;
+        }
+        try {
+            long available = num(c.get("available")), held = num(c.get("held")), confirmed = num(c.get("confirmed"));
+            boolean ok = available >= 0 && held >= 0 && confirmed >= 0 && num(c.get("total")) == total
+                    && available + held + confirmed == total && Boolean.TRUE.equals(response.obj().get("reconciled"));
+            expect(ok, "state reconciliation failed: " + c);
+            return ok;
+        } catch (RuntimeException e) {
+            expect(false, "malformed state counts: " + c);
+            return false;
+        }
+    }
+
+    static void checkMetrics(Map<String, Double> before, Map<String, Double> after,
+                             String showId, long available, Stats observed) {
+        if (before == null || after == null) {
+            expect(false, "/metrics unavailable; reconciliation is required");
+            return;
+        }
+        Map<String, Long> expected = new LinkedHashMap<>();
+        expected.put("reservations_confirmed_total", observed.count("201"));
+        expected.put("reservations_declined_total{reason=\"seat_taken\"}", observed.count("409 seat_taken"));
+        expected.put("reservations_declined_total{reason=\"per_user_limit\"}", observed.count("409 per_user_limit"));
+        expected.put("reservations_declined_total{reason=\"idempotent_replay\"}", observed.count("200 idempotent replay"));
+        expected.put("reservations_declined_total{reason=\"idempotency_key_reused\"}", observed.count("409 idempotency_key_reused"));
+        expected.forEach((key, count) -> {
+            double actual = delta(before, after, key);
+            System.out.printf("   %s delta=%.0f client=%d%n", key, actual, count);
+            expect(before.containsKey(key) && after.containsKey(key) && actual == count,
+                    "counter missing or inconsistent: " + key + " delta=" + actual + " client=" + count);
+        });
+        Double gauge = after.get("seats_available{show_id=\"" + showId + "\"}");
+        System.out.println("   seats_available=" + gauge + " API=" + available);
+        expect(gauge != null && gauge == (double) available, "seats_available gauge does not match API");
+    }
+
     static double delta(Map<String, Double> before, Map<String, Double> after, String key) {
         return after.getOrDefault(key, 0.0) - before.getOrDefault(key, 0.0);
     }
@@ -472,9 +526,37 @@ public class Burst {
     }
 
     static Res call(String method, String path, String token, String body, Map<String, String> headers, boolean limited) {
+        Res result = send(method, path, token, body, headers, limited);
+        observe(method, path, result);
+        return result;
+    }
+
+    static void observe(String method, String path, Res r) {
+        if (warmingUp && path.equals("/readyz")) {
+            warmupAttempts.add(r);
+            return;
+        }
+        attempts.add(r);
+        if (path.endsWith("/reserve")) reserveAttempts.add(r);
+        expect(r.status() != 0 && r.status() < 500, method + " " + path + ": " + r.outcome());
+        boolean expected;
+        if (path.endsWith("/reserve")) {
+            expected = r.status() == 201 || (r.status() == 200 && r.replayed())
+                    || (r.status() == 409 && List.of("seat_taken", "per_user_limit", "idempotency_key_reused").contains(r.reason() == null ? "" : r.reason()))
+                    || (!strict && r.status() == 429 && "overloaded".equals(r.reason()));
+        } else if (path.endsWith("/cancel")) {
+            expected = r.status() == 200 || r.status() == 404;
+        } else {
+            expected = r.status() == (method.equals("POST") && path.equals("/shows") ? 201 : 200);
+        }
+        expect(expected, "unexpected response: " + method + " " + path + ": " + r.outcome());
+    }
+
+    static Res send(String method, String path, String token, String body, Map<String, String> headers, boolean limited) {
         long start = System.nanoTime();
         try {
             if (limited) inFlight.acquire();
+            peakHttp.accumulateAndGet(activeHttp.incrementAndGet(), Math::max);
             try {
                 HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(base + path)).timeout(Duration.ofSeconds(90))
                         .header("X-Request-Id", "burst-" + RUN + "-" + UUID.randomUUID().toString().substring(0, 8));
@@ -493,6 +575,7 @@ public class Burst {
                 boolean replayed = "true".equals(resp.headers().firstValue("Idempotent-Replayed").orElse(""));
                 return new Res(resp.statusCode(), parsed, reason, micros, replayed);
             } finally {
+                activeHttp.decrementAndGet();
                 if (limited) inFlight.release();
             }
         } catch (Exception e) {
@@ -563,7 +646,9 @@ public class Burst {
                 default: {
                     int st = i;
                     while (i < s.length() && "+-0123456789.eE".indexOf(s.charAt(i)) >= 0) i++;
-                    return Double.parseDouble(s.substring(st, i));
+                    String number = s.substring(st, i);
+                    if (number.contains(".") || number.contains("e") || number.contains("E")) return Double.parseDouble(number);
+                    return Long.parseLong(number);
                 }
             }
         }

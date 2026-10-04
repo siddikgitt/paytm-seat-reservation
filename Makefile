@@ -1,7 +1,7 @@
 URL ?= http://localhost:8080
 MVN_IMAGE := maven:3.9-eclipse-temurin-21
 
-.PHONY: up down logs test test-local burst build
+.PHONY: up down logs test test-local test-burst burst burst-strict build
 
 ## Run the service + Postgres exactly as deployed (Dockerfile build)
 up:
@@ -34,3 +34,9 @@ test:
 ## On-sale stampede against any deployment: make burst URL=https://<your-app>.onrender.com
 burst:
 	./burst.sh $(URL)
+
+burst-strict:
+	STRICT=true ./burst.sh $(URL)
+
+test-burst:
+	./test-burst.sh

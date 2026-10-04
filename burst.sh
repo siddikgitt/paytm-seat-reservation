@@ -25,7 +25,7 @@ fi
 TARGET="$(echo "$BASE_URL" | sed -E 's#//(localhost|127\.0\.0\.1)([:/]|$)#//host.docker.internal\2#')"
 exec docker run --rm -i \
   --add-host=host.docker.internal:host-gateway \
-  -e ADMIN_KEY -e CONCURRENCY -e STAMPEDE -e HOT_USERS -e USERS -e ROWS -e COLS -e RETRY_PCT -e RETRIES_429 \
+  -e STRICT -e ADMIN_KEY -e CONCURRENCY -e STAMPEDE -e HOT_USERS -e USERS -e ROWS -e COLS -e RETRY_PCT -e RETRIES_429 \
   -v "$DIR/scripts:/scripts:ro" \
   eclipse-temurin:21-jdk \
   java $JAVA_OPTS /scripts/Burst.java "$TARGET"
