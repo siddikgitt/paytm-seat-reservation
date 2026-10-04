@@ -115,8 +115,9 @@ public class ReservationRepository {
                 """, reservationId, userId, showId, labels.toArray(String[]::new));
     }
 
-    public Optional<Reservation> lockReservation(UUID id) {
-        return jdbc.query("SELECT * FROM reservations WHERE id = ? FOR UPDATE", RESERVATION, id)
+    /** Ownership is part of the predicate: another user's reservation is indistinguishable from a missing one. */
+    public Optional<Reservation> lockReservation(UUID id, String userId) {
+        return jdbc.query("SELECT * FROM reservations WHERE id = ? AND user_id = ? FOR UPDATE", RESERVATION, id, userId)
                 .stream().findFirst();
     }
 

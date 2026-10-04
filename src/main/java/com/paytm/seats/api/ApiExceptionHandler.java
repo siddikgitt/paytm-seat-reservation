@@ -11,7 +11,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
-import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -39,9 +39,9 @@ public class ApiExceptionHandler {
         return respond(HttpStatus.NOT_FOUND, "not_found", "no such " + e.getName());
     }
 
-    @ExceptionHandler(MissingRequestHeaderException.class)
-    public ResponseEntity<ErrorResponse> handleMissingHeader(MissingRequestHeaderException e) {
-        return respond(HttpStatus.BAD_REQUEST, "invalid_request", "missing header " + e.getHeaderName());
+    @ExceptionHandler(ServletRequestBindingException.class)
+    public ResponseEntity<ErrorResponse> handleBinding(ServletRequestBindingException e) {
+        return respond(HttpStatus.BAD_REQUEST, "invalid_request", e.getMessage());
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

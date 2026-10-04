@@ -131,6 +131,57 @@ public class ReservationService {
         return new ReserveResult(r, false);
     }
 
+    /**
+     * Owner-only, idempotent cancel. Lock order matches reserve (reservation, quota, seats), and the seat
+     * release is guarded on reservation_id, so it can never free a seat that now belongs to someone else.
+     */
+    public Reservation cancel(AuthUser user, UUID reservationId) {
+        RequestContext.reservation(reservationId);
+        record Cancelled(Reservation reservation, int released) {
+        }
+        Cancelled result = withRetry(() -> tx.execute(status -> {
+            Reservation r = repo.lockReservation(reservationId, user.userId())
+                    .orElseThrow(() -> ApiException.notFound("reservation not found"));
+            if (Reservation.CANCELLED.equals(r.status())) {
+                return new Cancelled(r, -1);
+            }
+            repo.releaseQuota(r.showId(), r.userId(), r.seats().size());
+            repo.lockSeatsOf(r.id());
+            int released = repo.releaseSeats(r.id());
+            repo.markCancelled(r.id());
+            return new Cancelled(withStatus(r, Reservation.CANCELLED), released);
+        }));
+        Reservation r = result.reservation();
+        RequestContext.show(r.showId());
+        if (result.released() < 0) {
+            RequestContext.outcome("cancel_replayed", null);
+            return r;
+        }
+        if (result.released() != r.seats().size()) {
+            log.error("cancel released {} seats but reservation owned {}", result.released(), r.seats().size());
+        }
+        metrics.cancelled(result.released());
+        RequestContext.outcome("cancelled", null);
+        log.info("reservation cancelled seats={}", r.seats());
+        return r;
+    }
+
+    public Reservation get(AuthUser user, UUID reservationId) {
+        return repo.findById(reservationId)
+                .filter(r -> r.userId().equals(user.userId()))
+                .orElseThrow(() -> ApiException.notFound("reservation not found"));
+    }
+
+    public List<Reservation> mine(AuthUser user, UUID showId) {
+        shows.get(showId);
+        return repo.findForUser(showId, user.userId());
+    }
+
+    private static Reservation withStatus(Reservation r, String status) {
+        return new Reservation(r.id(), r.showId(), r.userId(), r.idempotencyKey(), r.requestHash(), r.seats(),
+                r.amountPaise(), status, r.createdAt());
+    }
+
     private ReserveResult replay(Reservation existing, String requestHash) {
         RequestContext.reservation(existing.id());
         if (!existing.requestHash().equals(requestHash)) {

@@ -6,10 +6,12 @@ import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.paytm.seats.auth.AuthUser;
@@ -48,5 +50,21 @@ public class ReservationController {
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
                 .header(REPLAYED_HEADER, Boolean.toString(result.replayed()))
                 .body(ReservationView.of(result.reservation()));
+    }
+
+    /** Only the owner may cancel; anyone else gets 404. Cancelling twice returns the cancelled reservation. */
+    @PostMapping("/reservations/{id}/cancel")
+    public ReservationView cancel(AuthUser user, @PathVariable UUID id) {
+        return ReservationView.of(reservations.cancel(user, id));
+    }
+
+    @GetMapping("/reservations/{id}")
+    public ReservationView get(AuthUser user, @PathVariable UUID id) {
+        return ReservationView.of(reservations.get(user, id));
+    }
+
+    @GetMapping("/me/reservations")
+    public List<ReservationView> mine(AuthUser user, @RequestParam("show_id") UUID showId) {
+        return reservations.mine(user, showId).stream().map(ReservationView::of).toList();
     }
 }
