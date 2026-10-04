@@ -32,8 +32,8 @@ No local result establishes public capacity.
 - Render web service: Free, Singapore; no paid upgrade.
 - Render database: Free PostgreSQL 18, provisioned October 5, 2026 (Asia/Kolkata).
 - Database expiry shown by Render: **November 4, 2026**.
-- Application revision used for the latest public runs: `a743ce1`; load-generator revision: `1e343f2`.
-  Later documentation-only commits do not change the tested application.
+- Latest application revision: `2d73e8d`; see the follow-up ingress repair below. Earlier failed runs are retained.
+  Load-generator implementation is unchanged from `1e343f2`.
 - Fresh public checkout Docker builds passed at `d8b26cb` and `238f9ac`.
 - A clean clone at `1e343f2` also built and ran with unmodified Docker Compose; `/readyz` returned UP.
   See [clean-checkout proof](evidence/clean-checkout-docker.txt).
@@ -120,8 +120,7 @@ Failed iterations are retained rather than relabeled as passing results.
 ## Submission decision
 
 **Do not submit as a completed assignment.** Code regressions, Docker startup, log evidence, restart persistence,
-and explicit cold-start recovery are verified. The free public deployment fails the required functional and
-strict load gates. The strict result cannot be replaced by the smaller local or functional runs.
+and explicit cold-start recovery are verified. The repaired free public deployment passes the functional gate but still fails the required strict load gate. The strict result cannot be replaced by the smaller local or functional runs.
 No paid resources or upgrade were authorized or used. The HR draft and generated admin credential are in the
 ignored local `private-submission/` directory; no email was sent.
 
@@ -129,7 +128,7 @@ ignored local `private-submission/` directory; no email was sent.
 The previous README's claimed startup and throughput measurements had no retained evidence in this checkout
 and were removed rather than presented as verified results.
 
-## Follow-up investigation (in progress)
+## Follow-up ingress repair — application revision `2d73e8d`
 
 The user requested another repair pass after the initial failed submission gate.
 The Docker image now queues requests in HAProxy before allocating Spring request state, isolates health/read
@@ -145,4 +144,45 @@ quota enforcement, and idempotency semantics are unchanged.
   State/counters reconciled; sampled peak 465.6 MiB; seven failed health probes out of 99.
   Cold startup increased from about 34 to about 98 seconds, so C1 was retained.
 - Revised queue deadline: 480 seconds, within the existing strict client deadline; no retries added.
-  Final constrained and public verification: running. These prototypes are not passing capacity evidence.
+  The earlier prototypes are not passing capacity evidence.
+- [Final constrained strict run](evidence/local-queued-strict.txt): PASS with combined **512 MiB / 0.1 CPU**.
+  All 20,000 stampede tasks released together, retries disabled; peak outstanding attempts 19,918.
+  Zero 5xx, transport errors or 429s; all business counters and seat state reconciled.
+  Slowest reservation 331.45 seconds. Kernel memory peak 428,097,536 bytes (408.27 MiB), no OOM events.
+  Separate external readiness monitoring saw **6 failures in 107 probes** (five 5-second timeouts, one 503).
+  This remains a health-latency limitation under the tight local CPU cap, despite the burst passing.
+  See [resource samples](evidence/local-queued-resource-samples.json) and [cgroup counters](evidence/local-queued-memory.txt).
+- [Public functional run](evidence/live-queued-functional.txt): **PASS**, default 1,000 in flight, 20,000-request stampede.
+  23,034 reservation attempts; 1,674 confirmations, 101 replays, 21,240 seat-taken declines, 18 quota declines,
+  one key-reuse decline. Zero 5xx/transport failures/429s across setup and load.
+  215 live snapshots reconciled; final 153 available + 1,847 confirmed = 2,000 and all counter deltas matched.
+  The main stampede completed in 219.07 seconds (91 requests/second). Reported client latency includes
+  local concurrency-slot waiting in functional mode; it is not pure server processing latency.
+- [Clean-checkout Docker checks](evidence/queued-docker-checks.json): build/start passed at `2d73e8d`;
+  a 188,956-byte show request and 789,162-byte response streamed correctly through the proxy.
+  All 20,000 seats persisted when the application was replaced with the clean-checkout image.
+- [Public strict run](evidence/live-queued-strict.txt): **FAIL** at `2d73e8d`, Java 21.0.8 client on macOS,
+  `JAVA_TOOL_OPTIONS=-Xmx2g STRICT=true ./burst.sh <live-url>`. All 20,000 stampede tasks released together;
+  retries disabled; peak outstanding HTTP attempts **20,001** including a state probe.
+  Across 23,034 reservation attempts: 1,441 confirmations, 83 replays, 9,848 seat-taken declines,
+  13 quota declines, one key-reuse decline, **10,434 HTTP 429, 1,213 HTTP 502 and one HTTP 520**.
+  Zero transport failures. Setup/probes added 22 more HTTP 429 responses; failed state polls remain failures.
+  Final API state and client ledger agreed at 1,610 confirmed + 390 available = 2,000, but the seat-taken
+  counter was 9,849 versus 9,848 observed declines. One response was therefore unaccounted for by that counter check.
+- [Hosting observations](evidence/queued-hosting-observations.txt): Render showed no new restart or failed
+  instance event during this repaired run. Process uptime spanned both bursts. Application `requests_shed_total`
+  remained **zero**, so these public 429s did not come from the application's overload response.
+  The public proxy/hosting path remains the blocker; precise attribution of every gateway error is unproven.
+  Ten of 18 independent public readiness probes failed during strict load ([samples](evidence/live-queued-health.json)).
+- [Updated log recording](evidence/queued-live-logs.mp4): 20 seconds at one frame per second, captured from
+  Render Live Tail during strict run `2g8lh4`, including real confirmations, replays and declines.
+- The standard public workload now passes; strict local capacity passes with the health caveat above.
+  **The strict public acceptance gate still fails.** No retries, smaller concurrency, or synthetic outcomes
+  were substituted for it. Further completion requires resolving the public hosting-path behavior and repeating
+  the same strict public test. No paid upgrade or bypass of platform protection was attempted.
+
+- Revised-image [cold-start recovery](evidence/queued-cold-start-recovery.json): PASS. Explicit Render
+  suspend/resume with PostgreSQL retained; suspended readiness returned 503, then ready/live returned UP
+  after **50.07 seconds**. This is an explicit resume measurement, not a timed 15-minute idle wake.
+- Revised-image [persistence replay](evidence/queued-restart-persistence.txt): PASS. The original committed
+  reservation and idempotency key survived; replay was identical with HTTP 200 and the replay header.

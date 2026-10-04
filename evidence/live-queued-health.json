@@ -1,0 +1,204 @@
+[
+  {
+    "unix_time": 1791148277.1102579,
+    "error": "HTTP Error 429: Too Many Requests",
+    "seconds": 3.79
+  },
+  {
+    "unix_time": 1791148285.905685,
+    "error": "HTTP Error 429: Too Many Requests",
+    "seconds": 0.128
+  },
+  {
+    "unix_time": 1791148291.03984,
+    "error": "HTTP Error 429: Too Many Requests",
+    "seconds": 0.057
+  },
+  {
+    "unix_time": 1791148296.0991411,
+    "error": "HTTP Error 429: Too Many Requests",
+    "seconds": 0.054
+  },
+  {
+    "unix_time": 1791148301.159217,
+    "error": "HTTP Error 429: Too Many Requests",
+    "seconds": 0.055
+  },
+  {
+    "unix_time": 1791148306.216516,
+    "error": "HTTP Error 429: Too Many Requests",
+    "seconds": 0.045
+  },
+  {
+    "unix_time": 1791148311.26479,
+    "error": "HTTP Error 429: Too Many Requests",
+    "seconds": 0.042
+  },
+  {
+    "unix_time": 1791148316.312087,
+    "error": "HTTP Error 429: Too Many Requests",
+    "seconds": 0.062
+  },
+  {
+    "unix_time": 1791148321.378457,
+    "error": "HTTP Error 429: Too Many Requests",
+    "seconds": 0.049
+  },
+  {
+    "unix_time": 1791148326.432812,
+    "error": "HTTP Error 429: Too Many Requests",
+    "seconds": 0.048
+  },
+  {
+    "unix_time": 1791148331.482597,
+    "status": 200,
+    "body": {
+      "status": "UP",
+      "components": {
+        "database": {
+          "status": "UP",
+          "details": {
+            "latency_ms": 896
+          }
+        },
+        "readinessState": {
+          "status": "UP"
+        }
+      }
+    },
+    "seconds": 1.53
+  },
+  {
+    "unix_time": 1791148338.013632,
+    "status": 200,
+    "body": {
+      "status": "UP",
+      "components": {
+        "database": {
+          "status": "UP",
+          "details": {
+            "latency_ms": 498
+          }
+        },
+        "readinessState": {
+          "status": "UP"
+        }
+      }
+    },
+    "seconds": 1.497
+  },
+  {
+    "unix_time": 1791148344.5121439,
+    "status": 200,
+    "body": {
+      "status": "UP",
+      "components": {
+        "database": {
+          "status": "UP",
+          "details": {
+            "latency_ms": 602
+          }
+        },
+        "readinessState": {
+          "status": "UP"
+        }
+      }
+    },
+    "seconds": 1.008
+  },
+  {
+    "unix_time": 1791148350.523943,
+    "status": 200,
+    "body": {
+      "status": "UP",
+      "components": {
+        "database": {
+          "status": "UP",
+          "details": {
+            "latency_ms": 1695
+          }
+        },
+        "readinessState": {
+          "status": "UP"
+        }
+      }
+    },
+    "seconds": 2.199
+  },
+  {
+    "unix_time": 1791148357.727044,
+    "status": 200,
+    "body": {
+      "status": "UP",
+      "components": {
+        "database": {
+          "status": "UP",
+          "details": {
+            "latency_ms": 1099
+          }
+        },
+        "readinessState": {
+          "status": "UP"
+        }
+      }
+    },
+    "seconds": 1.49
+  },
+  {
+    "unix_time": 1791148364.2224798,
+    "status": 200,
+    "body": {
+      "status": "UP",
+      "components": {
+        "database": {
+          "status": "UP",
+          "details": {
+            "latency_ms": 399
+          }
+        },
+        "readinessState": {
+          "status": "UP"
+        }
+      }
+    },
+    "seconds": 0.892
+  },
+  {
+    "unix_time": 1791148370.118561,
+    "status": 200,
+    "body": {
+      "status": "UP",
+      "components": {
+        "database": {
+          "status": "UP",
+          "details": {
+            "latency_ms": 151
+          }
+        },
+        "readinessState": {
+          "status": "UP"
+        }
+      }
+    },
+    "seconds": 0.108
+  },
+  {
+    "unix_time": 1791148375.2321122,
+    "status": 200,
+    "body": {
+      "status": "UP",
+      "components": {
+        "database": {
+          "status": "UP",
+          "details": {
+            "latency_ms": 13
+          }
+        },
+        "readinessState": {
+          "status": "UP"
+        }
+      }
+    },
+    "seconds": 0.348
+  }
+]

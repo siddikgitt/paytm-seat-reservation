@@ -1,0 +1,119 @@
+Picked up JAVA_TOOL_OPTIONS: -Xmx2g
+Burst run=2g8lh4 target=https://seat-reservation-t3ml.onrender.com concurrency=20000 stampede=20000 hot_users=500 users=2000 hall=20x100
+strict=true retries_429=0
+waiting for https://seat-reservation-t3ml.onrender.com/readyz (cold start allowed) ready
+show c7436935-1609-4b1c-a4ca-6c84af467bab created with 2000 seats
+minting 3000 user tokens ...
+running Phase 1: hot-seat storm, 500 users -> A12 ...
+running Phase 2: 5 hot seats x 500 users ...
+running Phase 3: stampede 20000 reserves (10% duplicated retries) ...
+   invariant checked on 33 live snapshots during the stampede
+running Phase 4: same idempotency key x20 in parallel ...
+running Phase 5: one user, 10 parallel reserves, limit 4 ...
+   greedy user ends with 4 seats (limit 4)
+
+================ OUTCOME DISTRIBUTION ================
+
+== Phase 1: hot-seat storm, 500 users -> A12  (500 requests in 5272 ms, 95 req/s)
+   201 confirmed                            1
+   409 seat_taken                         499
+   latency ms  p50=3159.4  p95=5168.6  p99=5263.3  max=5266.7
+
+== Phase 2: 5 hot seats x 500 users  (2500 requests in 25177 ms, 99 req/s)
+   201 confirmed                            5
+   409 seat_taken                        2495
+   latency ms  p50=12751.9  p95=24260.7  p99=24953.5  max=25167.9
+
+== Phase 3: stampede 20000 reserves (10% duplicated retries)  (20000 requests in 98477 ms, 203 req/s)
+   200 idempotent replay                   64
+   201 confirmed                         1427
+   409 per_user_limit                       7
+   409 seat_taken                        6854
+   429                                  10434
+   502 SERVER ERROR                      1213
+   520 SERVER ERROR                         1
+   latency ms  p50=19977.0  p95=87953.1  p99=96014.6  max=98336.1
+
+== Phase 4: same idempotency key x20 in parallel  (21 requests in 373 ms, 56 req/s)
+   200 idempotent replay                   19
+   201 confirmed                            1
+   409 idempotency_key_reused               1
+   latency ms  p50=268.4  p95=306.0  p99=371.4  max=371.4
+
+== Phase 5: one user, 10 parallel reserves, limit 4  (10 requests in 166 ms, 60 req/s)
+   201 confirmed                            4
+   409 per_user_limit                       6
+   latency ms  p50=152.5  p95=165.9  p99=165.9  max=165.9
+
+== Phase 6: spoofing, owner-only cancel, rebook  (6 requests in 0 ms, 0 req/s)
+   200 ok                                   2
+   201 confirmed                            3
+   404 not_found                            1
+   latency ms  p50=97.4  p95=206.0  p99=206.0  max=206.0
+
+== Cold-start readiness attempts (before burst)  (1 requests in 0 ms, 0 req/s)
+   200 ok                                   1
+   latency ms  p50=354.5  p95=354.5  p99=354.5  max=354.5
+
+== Every HTTP attempt after readiness (including setup, probes and retries)  (26103 requests in 0 ms, 0 req/s)
+   200 idempotent replay                   83
+   200 ok                                3045
+   201 confirmed                         1442
+   404 not_found                            1
+   409 idempotency_key_reused               1
+   409 per_user_limit                      13
+   409 seat_taken                        9848
+   429                                  10456
+   502 SERVER ERROR                      1213
+   520 SERVER ERROR                         1
+   latency ms  p50=14502.2  p95=84722.6  p99=95424.4  max=98336.1
+
+== Every reservation HTTP attempt  (23034 requests in 0 ms, 0 req/s)
+   200 idempotent replay                   83
+   201 confirmed                         1441
+   409 idempotency_key_reused               1
+   409 per_user_limit                      13
+   409 seat_taken                        9848
+   429                                  10434
+   502 SERVER ERROR                      1213
+   520 SERVER ERROR                         1
+   latency ms  p50=17769.4  p95=86406.5  p99=95741.5  max=98336.1
+Peak outstanding HTTP attempts: 20001
+Negotiated response protocols: {HTTP_2=26104}
+
+== TOTAL
+   200 idempotent replay                   83
+   200 ok                                   2
+   201 confirmed                         1441
+   404 not_found                            1
+   409 idempotency_key_reused               1
+   409 per_user_limit                      13
+   409 seat_taken                        9848
+   429                                  10434
+   502 SERVER ERROR                      1213
+   520 SERVER ERROR                         1
+   5xx + transport errors                1214
+   429 shed then retried (same key)         0
+
+================ RECONCILIATION ================
+   GET /shows: available=390 held=0 confirmed=1610 total=2000  (sum=2000)
+   seats in live reservations returned to us: 1610  vs confirmed in API: 1610
+   reservations_confirmed_total delta=1441 client=1441
+   reservations_declined_total{reason="seat_taken"} delta=9849 client=9848
+   reservations_declined_total{reason="per_user_limit"} delta=13 client=13
+   reservations_declined_total{reason="idempotent_replay"} delta=83 client=83
+   reservations_declined_total{reason="idempotency_key_reused"} delta=1 client=1
+   seats_available=390.0 API=390
+
+FAIL: 23343 violation(s):
+   - unexpected response: POST /shows/c7436935-1609-4b1c-a4ca-6c84af467bab/reserve: 429 
+   - reservation retries exhausted with 429
+   - POST /shows/c7436935-1609-4b1c-a4ca-6c84af467bab/reserve: 502 SERVER ERROR
+   - unexpected response: POST /shows/c7436935-1609-4b1c-a4ca-6c84af467bab/reserve: 502 SERVER ERROR
+   - unexpected response: GET /shows/c7436935-1609-4b1c-a4ca-6c84af467bab: 429 
+   - state poll failed: 429 
+   - POST /shows/c7436935-1609-4b1c-a4ca-6c84af467bab/reserve: 520 SERVER ERROR
+   - unexpected response: POST /shows/c7436935-1609-4b1c-a4ca-6c84af467bab/reserve: 520 SERVER ERROR
+   - stampede contained unexpected final outcomes
+   - 1214 server errors / transport failures during the burst
+   - counter missing or inconsistent: reservations_declined_total{reason="seat_taken"} delta=9849.0 client=9848

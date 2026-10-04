@@ -1,0 +1,11 @@
+Application revision: 2d73e8d
+After strict public run 2g8lh4; before deliberate suspension.
+Render Events showed no new health failure or recovery event since deployment.
+Most recent health-failure event remained October 5 01:57 Asia/Kolkata (previous application).
+admission_in_flight 0.0
+admission_queued 0.0
+process_start_time_seconds 1.791147747585E9
+process_uptime_seconds 664.557
+requests_shed_total 0.0
+Ten of eighteen independent public readiness probes failed during the strict run; see live-queued-health.json.
+Inference: public 429s were outside application admission control; precise origin of all gateway errors is unproven.

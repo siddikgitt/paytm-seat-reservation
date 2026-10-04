@@ -1,0 +1,8 @@
+-------------------------------------------------------------------------------
+Test set: com.paytm.seats.DatabaseUrlListenerTest
+-------------------------------------------------------------------------------
+Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.031 s -- in com.paytm.seats.DatabaseUrlListenerTest
+-------------------------------------------------------------------------------
+Test set: com.paytm.seats.ReservationConcurrencyTest
+-------------------------------------------------------------------------------
+Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 7.580 s -- in com.paytm.seats.ReservationConcurrencyTest

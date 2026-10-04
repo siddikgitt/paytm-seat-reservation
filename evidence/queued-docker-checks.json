@@ -1,0 +1,57 @@
+{
+  "commit": "2d73e8d77c67e382ddd335028206c0052c9b8388",
+  "environment": "Docker/Colima; app 512 MiB / 0.1 CPU; PostgreSQL 18",
+  "clean_checkout_build": "PASS",
+  "clean_checkout_startup_seconds": 43.93,
+  "streamed_request_bytes": 188956,
+  "streamed_response_bytes": 789162,
+  "twenty_thousand_seat_show_after_app_replacement": "PASS",
+  "database_paused_ready": {
+    "status": 503,
+    "seconds": 2.08,
+    "body": {
+      "status": "DOWN",
+      "components": {
+        "database": {
+          "status": "DOWN",
+          "details": {
+            "error": "PSQLException"
+          }
+        },
+        "readinessState": {
+          "status": "UP"
+        }
+      }
+    }
+  },
+  "database_paused_live": {
+    "status": 200,
+    "seconds": 0.092,
+    "body": {
+      "status": "UP",
+      "components": {
+        "livenessState": {
+          "status": "UP"
+        }
+      }
+    }
+  },
+  "database_recovered_ready": {
+    "status": 200,
+    "seconds": 0.272,
+    "body": {
+      "status": "UP",
+      "components": {
+        "database": {
+          "status": "UP",
+          "details": {
+            "latency_ms": 261
+          }
+        },
+        "readinessState": {
+          "status": "UP"
+        }
+      }
+    }
+  }
+}

@@ -193,8 +193,12 @@ share the same 512 MB limit. Both processes stop if either dies; readiness still
 
 A local comparison at 512 MB / 0.1 CPU found normal tiered compilation slower on the first burst and more
 memory-hungry than the C1 setting, so C1 was retained. The short 180-second prototype queue expired requests;
-those failed results are retained. The final longer-queue configuration must pass the public test before the
-submission status changes. Codex designed and implemented this follow-up; it is part of the AI-led work.
+those failed results are retained. The 480-second queue passed the constrained local strict burst and the
+public functional burst. The strict public run still produced 1,214 server errors and 10,434 reservation 429s,
+with one seat-taken counter discrepancy. Application overload shedding stayed at zero and Render reported no
+new restart. This isolates a remaining public hosting-path limitation without proving the source of every
+upstream error. Six of 107 separate local readiness probes also failed under the tight CPU cap.
+No passing submission is claimed. Codex designed and implemented this follow-up; it is part of the AI-led work.
 
 ## 7. Possible extensions
 

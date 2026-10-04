@@ -4,7 +4,7 @@ A JSON HTTP service for assigned seats, designed to prevent double sales, enforc
 and make reservation retries idempotent. Public capacity limitations are documented below.
 Java 21 + Spring Boot 3.3 (virtual threads) + PostgreSQL (16 locally; Render provisioned 18). Design notes are in [WRITEUP.md](WRITEUP.md).
 
-**Submission status: NOT READY FOR HR.** The free deployment failed the strict concurrency gate.
+**Submission status: NOT READY FOR HR.** The repaired deployment passes the functional burst; the free public deployment still fails the strict 20,000-concurrent gate.
 See [verified results and remaining blockers](VERIFICATION.md); the live URL alone is not a passing submission.
 
 **Repository:** https://github.com/siddikgitt/paytm-seat-reservation
@@ -13,7 +13,7 @@ See [verified results and remaining blockers](VERIFICATION.md); the live URL alo
 
 **API base URL:** `https://seat-reservation-t3ml.onrender.com` (the root path is not an API route).
 
-**Live logs under load:** [20-second recording](evidence/live-logs.mp4).
+**Live logs under load:** [20-second recording](evidence/queued-live-logs.mp4).
 
 [Readiness](https://seat-reservation-t3ml.onrender.com/readyz) · [Liveness](https://seat-reservation-t3ml.onrender.com/livez) · [Metrics](https://seat-reservation-t3ml.onrender.com/metrics)
 
@@ -204,8 +204,8 @@ response bodies.
 ```
 
 On Render the logs are under the service's **Logs** tab and can be searched with `request_id:` / `reason:`
-terms. The [live-log recording](evidence/live-logs.mp4) captures the Render live tail at one frame per second
-during the public functional burst. It contains synthetic test users, request ids, outcomes, and timings.
+terms. The [live-log recording](evidence/queued-live-logs.mp4) captures the Render live tail at one frame per second
+during the public strict burst on revision `2d73e8d`. It contains synthetic test users, request ids, outcomes, and timings.
 The recording is evidence of live logging, not proof that the burst passed; see VERIFICATION.md for results.
 
 ### Health
@@ -224,10 +224,10 @@ The recording is evidence of live logging, not proof that the burst passed; see 
      are generated, and `DATABASE_URL` is wired to the database.
    - `seat-reservation-db`: Render Postgres.
 3. Copy `ADMIN_API_KEY` from the service's **Environment** tab, then run
-   `ADMIN_KEY=... ./burst.sh https://seat-reservation-xxxx.onrender.com`.
+   `ADMIN_KEY=... ./burst.sh https://seat-reservation-t3ml.onrender.com`.
 
 Plan notes:
-- The **free** web plan sleeps after 15 idle minutes. An explicit suspend/resume test reached readiness after 36.92 seconds; ordinary idle wake-up time can differ. Public burst capacity must be measured; local results do not establish free-tier capacity.
+- The **free** web plan sleeps after 15 idle minutes. An explicit suspend/resume test reached readiness after 50.07 seconds on revision `2d73e8d`; ordinary idle wake-up time can differ. Public burst capacity must be measured; local results do not establish free-tier capacity.
 - The provisioned free database expires on **November 4, 2026**, as shown in the Render dashboard.
   No paid upgrade has been configured. See [Render free-service limits](https://render.com/docs/free).
 
