@@ -6,3 +6,5 @@ target/
 .env
 *.log
 burst-*.json
+
+private-submission/

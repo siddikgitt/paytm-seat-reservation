@@ -58,7 +58,7 @@ public class Burst {
 
     static final HttpClient http = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
-            .connectTimeout(Duration.ofSeconds(20))
+            .connectTimeout(Duration.ofSeconds(strict ? 120 : 20))
             .executor(Executors.newVirtualThreadPerTaskExecutor())
             .build();
     static Semaphore inFlight;
@@ -129,7 +129,19 @@ public class Burst {
         }
     }
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
+        try {
+            run(args);
+        } catch (Exception e) {
+            attempts.print();
+            reserveAttempts.print();
+            System.err.println("FAIL: burst aborted: " + e);
+            violations.stream().distinct().limit(50).forEach(v -> System.err.println("   - " + v));
+            System.exit(1);
+        }
+    }
+
+    static void run(String[] args) throws Exception {
         if (args.length < 1) {
             System.err.println("usage: java scripts/Burst.java <BASE_URL>");
             System.exit(2);
@@ -418,7 +430,8 @@ public class Burst {
     static String[] mintTokens(int n) throws Exception {
         System.out.println("minting " + n + " user tokens ...");
         String[] out = new String[n];
-        Semaphore tokenSlots = new Semaphore(64);
+        // Setup is outside the on-sale race. Keep token minting modest on free hosts.
+        Semaphore tokenSlots = new Semaphore(8);
         try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<?>> fs = new ArrayList<>();
             for (int i = 0; i < n; i++) {
@@ -558,7 +571,8 @@ public class Burst {
             if (limited) inFlight.acquire();
             peakHttp.accumulateAndGet(activeHttp.incrementAndGet(), Math::max);
             try {
-                HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(base + path)).timeout(Duration.ofSeconds(90))
+                HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(base + path))
+                        .timeout(Duration.ofSeconds(strict ? 600 : 90))
                         .header("X-Request-Id", "burst-" + RUN + "-" + UUID.randomUUID().toString().substring(0, 8));
                 if (body != null) {
                     b.header("Content-Type", "application/json").method(method, HttpRequest.BodyPublishers.ofString(body));

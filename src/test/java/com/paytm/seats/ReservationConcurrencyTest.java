@@ -40,7 +40,7 @@ class ReservationConcurrencyTest {
 
     @Container
     @ServiceConnection
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(System.getProperty("test.postgres.image", "postgres:16-alpine"))
             .withCommand("postgres", "-c", "max_connections=200");
 
     @LocalServerPort

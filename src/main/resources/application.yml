@@ -2,10 +2,11 @@ server:
   port: ${PORT:8080}
   shutdown: graceful
   tomcat:
-    # Virtual threads serve each request; let the burst queue inside Tomcat
-    # rather than be refused at the socket.
-    max-connections: 20000
-    accept-count: 10000
+    # Bound per-connection buffers on a 512 MB instance. Extra connections wait
+    # in the OS/proxy backlog instead of allocating 20,000 servlet requests.
+    max-connections: ${HTTP_MAX_CONNECTIONS:512}
+    accept-count: ${HTTP_ACCEPT_COUNT:20000}
+    keep-alive-timeout: 2s
     connection-timeout: 30s
 
 spring:
