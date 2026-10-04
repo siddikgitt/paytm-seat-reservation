@@ -48,6 +48,9 @@ storage and private TLS networking. No paid upgrade was used.
   This is restart recovery, not an idle-wake measurement. No reliable duration
   is claimed because the initial local Python timing probe lacked trusted CA roots;
   the final checks used curl with normal certificate verification.
+- [Fresh public checkout](evidence/northflank-clean-checkout.json) at `f20b3fd`:
+  unmodified `make up` built the Docker image, started PostgreSQL 16 and the service,
+  and returned readiness UP. Disposable verification containers were removed afterward.
 - Both public load clients use Java 21.0.8 on macOS with `JAVA_TOOL_OPTIONS=-Xmx2g`.
   HTTP/2 compatibility checks alone do not establish the strict capacity gate.
 - [Deployment reproduction](deploy/northflank.md) documents the exact free resources

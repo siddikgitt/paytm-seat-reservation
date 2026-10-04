@@ -1,0 +1,21 @@
+{
+  "revision": "f20b3fd0e2bba58ed59294c0291945f2b8cd9894",
+  "checkout": "fresh HTTPS clone of public GitHub repository",
+  "command": "COMPOSE_PROJECT_NAME=paytm-final-checkout make up",
+  "compose": "unmodified repository compose, PostgreSQL 16",
+  "docker_build_and_start": "PASS",
+  "readiness": {
+    "status": "UP",
+    "components": {
+      "database": {
+        "status": "UP",
+        "details": {
+          "latency_ms": 9
+        }
+      },
+      "readinessState": {
+        "status": "UP"
+      }
+    }
+  }
+}
