@@ -1,0 +1,6 @@
+Observed 2026-10-04 around 21:27 UTC while client strict run 2got2u still awaited responses.
+admission_in_flight 0.0
+admission_queued 0.0
+process_uptime_seconds 307.952
+requests_shed_total 0.0
+reservations_confirmed_total 1359.0

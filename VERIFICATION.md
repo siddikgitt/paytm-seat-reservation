@@ -186,3 +186,46 @@ quota enforcement, and idempotency semantics are unchanged.
   after **50.07 seconds**. This is an explicit resume measurement, not a timed 15-minute idle wake.
 - Revised-image [persistence replay](evidence/queued-restart-persistence.txt): PASS. The original committed
   reservation and idempotency key survived; replay was identical with HTTP 200 and the replay header.
+
+
+## Response attribution and load-client deadline repair
+
+- Application/diagnostic revision `a96bf0f`: `X-Seat-Ingress: haproxy` marks responses passing through
+  the container's HTTP response processing, including proxy-generated HTTP errors. Healthy public replies
+  carry the marker. Very early malformed HTTP can precede this rule, so absence alone is not absolute attribution.
+- [Public run `2got2u`](evidence/live-attribution-incomplete.txt): **FAILED AND ABORTED, incomplete**.
+  Strict concurrency 20,000, retries zero. Captured 429s with `cf-mitigated: challenge`, HTML challenge content,
+  and no ingress marker. Other plain-text 429s had `Retry-After: 1`; 502/520 responses also lacked the marker.
+  This confirms Cloudflare challenge interference; exact attribution of other upstream failures awaits provider diagnosis.
+  Response metadata is allowlisted; no credentials, cookies, request bodies, or complete error HTML are logged.
+- [Stalled-client evidence](evidence/attribution-incomplete-run.json): seven `Burst.send` calls remained parked
+  after more than twelve minutes. The run was stopped explicitly; no final outcome counts or passing reconciliation
+  are invented for an incomplete run. The earlier complete failed runs remain the public capacity evidence.
+- Local Java 21 reproduction: a 150 ms `HttpRequest.timeout` did not end a partial response body;
+  the request waited 2,040 ms until the peer closed the socket. Revision `9de12de` uses a timed asynchronous
+  response future and cancels the exchange on expiry, so the existing 600-second strict deadline covers the
+  complete response body. A stalled response is still a counted transport failure, never a success or retry.
+- [Verifier regression checks](evidence/body-deadline-verifier-tests.txt): **27 normal + 27 strict passed**,
+  including a real partial-response socket fixture and diagnostic redaction checks.
+- [Mid-run metrics](evidence/attribution-midrun-metrics.txt): the application was idle with zero overload shedding
+  while the public client still awaited responses. This supports, but does not fully localize, the upstream failure.
+- Render support was contacted through the signed-in dashboard with user authorization. Request title:
+  **Free plan load testing issues**. Correlation IDs, test details and the free-only constraint were included;
+  no credentials were sent. A provider answer is pending. No further public strict bursts are being repeated
+  against the confirmed challenge until there is a supported path forward.
+
+- [Revised-client local strict run](evidence/local-body-deadline-strict.txt), client/image `9de12de`: **PASS**.
+  Java 21 Docker client with 1,536 MiB heap; application and HAProxy share **512 MiB / 0.1 CPU**; PostgreSQL 18.
+  Peak outstanding attempts **20,000**; all 23,034 reservation attempts accounted for, retries disabled.
+  Zero 5xx/transport errors/429s after readiness. Fourteen expected readiness 503s occurred during container
+  startup before the burst and are reported separately. Final 151 available + 1,849 confirmed = 2,000;
+  every required counter matched. Maximum reservation latency 339.52 seconds.
+  [Kernel peak memory](evidence/local-body-deadline-memory.txt): 453,767,168 bytes (432.75 MiB), no OOM events.
+
+- [Revised-client public functional run](evidence/live-body-deadline-functional.txt): **PASS** against server
+  `a96bf0f`, client `9de12de`, Java 21.0.8/macOS with 2 GiB heap, 1,000 in flight and 20,000 stampede requests.
+  Across 23,034 reservation attempts: 1,669 confirmations, 102 replays, 21,243 seat-taken declines,
+  19 quota declines and one key-reuse decline. Zero 5xx/transport failures/429s, including setup and state probes.
+  Final state 155 available + 1,845 confirmed = 2,000; all business counters matched. Peak outstanding attempts
+  1,001 including a probe; all 26,258 HTTP responses used HTTP/2. Functional client latency includes waiting
+  for the client's concurrency slot. This verifies the revised client, not strict public capacity.

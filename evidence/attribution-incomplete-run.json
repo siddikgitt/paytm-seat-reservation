@@ -1,0 +1,26 @@
+{
+  "run": "2got2u",
+  "commit": "a96bf0f",
+  "status": "FAILED AND ABORTED: incomplete strict run, not passing evidence",
+  "dump_time": "2026-10-04T21:35:33.157444Z",
+  "pending_send_calls": 7,
+  "elapsed_process_time": "13:13",
+  "representative_stack": [
+    "java.base/java.lang.VirtualThread.park(VirtualThread.java:596)",
+    "java.base/java.lang.System$2.parkVirtualThread(System.java:2643)",
+    "java.base/jdk.internal.misc.VirtualThreads.park(VirtualThreads.java:54)",
+    "java.base/java.util.concurrent.locks.LockSupport.park(LockSupport.java:219)",
+    "java.base/java.util.concurrent.CompletableFuture$Signaller.block(CompletableFuture.java:1864)",
+    "java.base/java.util.concurrent.ForkJoinPool.unmanagedBlock(ForkJoinPool.java:3778)",
+    "java.base/java.util.concurrent.ForkJoinPool.managedBlock(ForkJoinPool.java:3723)",
+    "java.base/java.util.concurrent.CompletableFuture.waitingGet(CompletableFuture.java:1898)",
+    "java.base/java.util.concurrent.CompletableFuture.get(CompletableFuture.java:2072)",
+    "java.net.http/jdk.internal.net.http.HttpClientImpl.send(HttpClientImpl.java:934)",
+    "java.net.http/jdk.internal.net.http.HttpClientFacade.send(HttpClientFacade.java:133)",
+    "Burst.send(Burst.java:606)",
+    "Burst.call(Burst.java:561)",
+    "Burst.lambda$run$4(Burst.java:230)",
+    "java.base/java.lang.VirtualThread.run(VirtualThread.java:329)"
+  ],
+  "reproduction": "JDK 21, configured request timeout 150ms, server sends headers and one body byte then closes after 2s; client waited 2040ms and threw IOException."
+}

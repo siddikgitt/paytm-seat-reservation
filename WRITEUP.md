@@ -200,6 +200,26 @@ new restart. This isolates a remaining public hosting-path limitation without pr
 upstream error. Six of 107 separate local readiness probes also failed under the tight CPU cap.
 No passing submission is claimed. Codex designed and implemented this follow-up; it is part of the AI-led work.
 
+### Locating the remaining upstream failures
+
+Revision `a96bf0f` adds an attribution-only `X-Seat-Ingress` response header at HAProxy and bounded
+load-client diagnostics. The client logs allowlisted response headers and error-page classifications,
+never tokens, cookies, request bodies, or full error HTML. All original failure checks remain active.
+A repeat public strict run returned HTTP 429 with `cf-mitigated: challenge` and HTML challenge content,
+without the ingress marker. This identifies actual Cloudflare challenges outside the reservation API;
+other plain-text 429s and gateway errors also lacked the marker. Healthy replies include it.
+Cloudflare documents this challenge signal in its
+[response detection guide](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/),
+and Render documents its [Cloudflare-backed protection](https://render.com/docs/ddos-protection).
+Missing markers alone do not prove the exact cause of every gateway error (very early HTTP parsing failures
+can precede the HAProxy response rule). Provider correlation IDs are retained for diagnosis.
+
+The same investigation exposed a Java 21 client deadline gap: a partial body can outlive
+`HttpRequest.timeout`. The verifier now bounds the complete response future and cancels it on expiry;
+a regression fixture proves the timeout without accepting or retrying that failure. This is a verifier
+reliability fix, not evidence that the hosting gate passed. The diagnostic public run was incomplete and
+is explicitly marked aborted. The previous complete failures are retained.
+
 ## 7. Possible extensions
 
 1. TTL holds with confirm and payment as described in section 3, including lazy expiry in the claim predicate and

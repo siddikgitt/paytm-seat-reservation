@@ -157,11 +157,14 @@ Total client slots exceed the configured concurrency; strict mode still permits 
 Token setup uses at most eight requests in flight and is separate from the reservation stampede.
 Strict mode forces 20,000 stampede tasks, permits 20,000 simultaneous HTTP attempts, and disables 429 retries,
 even if conflicting environment variables are supplied. Strict requests allow up to 120 seconds to connect
-and 600 seconds for a response, so a slow free host is not silently replaced by a smaller burst. Tasks wait behind a common start gate. The script reports
+and 600 seconds for the complete response, including the body. An expired response future is cancelled
+and counted as a transport failure; it is never retried in strict mode. Tasks wait behind a common start gate. The script reports
 peak outstanding client HTTP attempts; this is not a claim that every connection reached the server simultaneously.
 A 429 or any unexpected outcome fails strict verification. Cold-start readiness attempts are counted separately
 from the burst, which begins once the service is ready. Every subsequent HTTP attempt is counted, including
 state polls, setup requests, and intermediate retry responses.
+The verifier also prints bounded failure-source diagnostics using safe response headers and page classifications;
+it never prints tokens, cookies, request bodies, or full upstream error HTML.
 
 Metrics are mandatory: missing metrics, missing counters, counter deltas that disagree with reservation responses,
 and an available-seat gauge that disagrees with the API all fail the run. Run against one isolated instance without
