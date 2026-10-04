@@ -1,0 +1,11 @@
+admission_in_flight 25.0
+admission_queued 0.0
+process_uptime_seconds 687.01
+requests_shed_total 0.0
+reservations_cancelled_total 1.0
+reservations_confirmed_total 3276.0
+reservations_declined_total{reason="idempotency_key_reused"} 1.0
+reservations_declined_total{reason="idempotent_replay"} 203.0
+reservations_declined_total{reason="invalid"} 0.0
+reservations_declined_total{reason="per_user_limit"} 32.0
+reservations_declined_total{reason="seat_taken"} 36770.0

@@ -1,0 +1,4 @@
+Local diagnostic, not the full acceptance verifier. HTTP/2 cleartext, 20,000 same-seat requests over 313 sessions, retries disabled.
+Application + HAProxy constrained to 512 MiB and 0.2 CPU; PostgreSQL 18. HAProxy 16 KB buffers, no hard buffer limit.
+Docker sampled 511.6 MiB / 512 MiB; container exited with OOMKilled=true. The diagnostic client received no complete HTTP status responses.
+Result: FAIL. This setting was not deployed publicly.

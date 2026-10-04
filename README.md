@@ -2,27 +2,27 @@
 
 A JSON HTTP service for assigned seats, designed to prevent double sales, enforce per-show quotas,
 and make reservation retries idempotent. Public capacity limitations are documented below.
-Java 21 + Spring Boot 3.3 (virtual threads) + PostgreSQL (16 locally; Render provisioned 18). Design notes are in [WRITEUP.md](WRITEUP.md).
+Java 21 + Spring Boot 3.3 (virtual threads) + PostgreSQL (16 locally; Northflank provisioned 18). Design notes are in [WRITEUP.md](WRITEUP.md).
 
 **Submission status: NOT READY FOR HR.** The repaired deployment passes the functional burst; the free public deployment still fails the strict 20,000-concurrent gate.
 See [verified results and remaining blockers](VERIFICATION.md); the live URL alone is not a passing submission.
 
 **Repository:** https://github.com/siddikgitt/paytm-seat-reservation
 
-**Live service:** [readiness response](https://seat-reservation-t3ml.onrender.com/readyz)
+**Live service:** [readiness response](https://p01--seat-reservation--wlpk4pp6vqpm.code.run/readyz)
 
-**API base URL:** `https://seat-reservation-t3ml.onrender.com` (the root path is not an API route).
+**API base URL:** `https://p01--seat-reservation--wlpk4pp6vqpm.code.run` (the root path is not an API route).
 
-**Live logs under load:** [20-second recording](evidence/queued-live-logs.mp4).
+**Live logs under load:** [20-second recording](evidence/northflank-live-logs.mp4).
 
-[Readiness](https://seat-reservation-t3ml.onrender.com/readyz) · [Liveness](https://seat-reservation-t3ml.onrender.com/livez) · [Metrics](https://seat-reservation-t3ml.onrender.com/metrics)
+[Readiness](https://p01--seat-reservation--wlpk4pp6vqpm.code.run/readyz) · [Liveness](https://p01--seat-reservation--wlpk4pp6vqpm.code.run/livez) · [Metrics](https://p01--seat-reservation--wlpk4pp6vqpm.code.run/metrics)
 
 | What | Where |
 |---|---|
 | Liveness | `GET /livez` |
 | Readiness (checks Postgres, fails closed) | `GET /readyz` |
 | Prometheus metrics | `GET /metrics` |
-| Logs | JSON on stdout, Render dashboard > Logs (see [Logs](#logs)) |
+| Logs | JSON on stdout, Northflank dashboard > Logs (see [Logs](#logs)) |
 | Burst | `./burst.sh <BASE_URL>` or `make burst URL=<BASE_URL>` |
 
 ## Quick start (clean checkout)
@@ -109,8 +109,8 @@ Cancelling again returns the same `200` and changes nothing. Another user's rese
 ## Burst
 
 ```bash
-./burst.sh https://seat-reservation-t3ml.onrender.com        # or: make burst URL=...
-ADMIN_KEY=<render ADMIN_API_KEY> ./burst.sh https://...
+./burst.sh https://p01--seat-reservation--wlpk4pp6vqpm.code.run        # or: make burst URL=...
+ADMIN_KEY=<deployed ADMIN_API_KEY> ./burst.sh https://...
 ```
 
 Phases:
@@ -146,8 +146,8 @@ A local run is not proof that the public deployment meets the grading bar.
 ### Strict grading mode
 
 ```bash
-ADMIN_KEY=... STRICT=true ./burst.sh https://seat-reservation-t3ml.onrender.com
-# equivalent: ADMIN_KEY=... make burst-strict URL=https://seat-reservation-t3ml.onrender.com
+ADMIN_KEY=... STRICT=true ./burst.sh https://p01--seat-reservation--wlpk4pp6vqpm.code.run
+# equivalent: ADMIN_KEY=... make burst-strict URL=https://p01--seat-reservation--wlpk4pp6vqpm.code.run
 ```
 
 The client prefers HTTP/2 (with HTTP/1.1 fallback) and reports the negotiated protocol. This lets HTTPS
@@ -206,10 +206,10 @@ response bodies.
 {"ts":"...","message":"request","logger_name":"access","level":"INFO","request_id":"burst-27ojwt-1a2b3c4d","user_id":"u17","show_id":"3731e110-...","outcome":"declined","reason":"seat_taken","method":"POST","path":"/shows/3731e110-.../reserve","status":409,"latency_ms":12}
 ```
 
-On Render the logs are under the service's **Logs** tab and can be searched with `request_id:` / `reason:`
-terms. The [live-log recording](evidence/queued-live-logs.mp4) captures the Render live tail at one frame per second
-during the public strict burst on revision `2d73e8d`. It contains synthetic test users, request ids, outcomes, and timings.
-The recording is evidence of live logging, not proof that the burst passed; see VERIFICATION.md for results.
+On Northflank, open the service's **Logs** tab. The [live-log recording](evidence/northflank-live-logs.mp4)
+captures the live stream at one frame per second during functional burst `2ikkxp` on revision `0b5b4d8`.
+It contains synthetic users and no deployment credentials. The recording proves live logging;
+[VERIFICATION.md](VERIFICATION.md) separately records the load outcomes.
 
 ### Health
 
@@ -217,9 +217,21 @@ The recording is evidence of live logging, not proof that the burst passed; see 
 - `/readyz` checks readiness plus a real `SELECT 1` on a **dedicated short-timeout connection** (2s) instead of
   the pool. The probe has a two-second timeout and a one-second cache; the isolated outage test requires
   `503` within six seconds and verifies recovery. This avoids pool-borrow contention, but HTTP connector
-  or CPU saturation can still delay health responses. Render uses `/readyz`.
+  or CPU saturation can still delay health responses. The deployment uses `/readyz`.
 
-## Deploy to Render
+## Current deployment: Northflank
+
+The live service and private PostgreSQL 18 database run on Northflank's **Free Developer Sandbox**
+in London, each with 0.2 shared vCPU and 512 MB RAM. Database storage is 6 GB persistent.
+See [deployment instructions](deploy/northflank.md). The functional burst passed, but the completed
+strict run returned **410 gateway 503s**. This does **not** meet the submission gate.
+The attempted HTTP/2 configuration also failed and is not the recommended deployment.
+
+The Sandbox is described as always on; no 30-day database expiry is shown for this deployment.
+This does not guarantee indefinite availability. Check readiness before sharing the URL.
+The admin credential is provided privately; `/auth/token` creates evaluator user tokens as shown above.
+
+## Alternative deployment: Render (previous test environment)
 
 1. Push this repo to GitHub (public).
 2. In Render, choose **New > Blueprint**, select the repo, and apply. [render.yaml](render.yaml) creates:

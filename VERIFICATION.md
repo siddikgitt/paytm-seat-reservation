@@ -3,6 +3,56 @@
 Submission status: **not ready for HR**. The public service is deployed, but the strict capacity gate has not passed.
 No local result establishes public capacity.
 
+## Northflank migration and HTTP/2 repair
+
+The current candidate is https://p01--seat-reservation--wlpk4pp6vqpm.code.run,
+on Northflank's Free Developer Sandbox in London. Application and PostgreSQL 18
+use separate 0.2 shared-vCPU / 512 MB allocations; PostgreSQL has 6 GB persistent
+storage and private TLS networking. No paid upgrade was used.
+
+- Revision `0b5b4d8`, public HTTP/1.1 upstream: [functional burst](evidence/northflank-functional.txt)
+  **PASS**, 1,000 configured concurrency, 23,034 reservation attempts, zero 5xx,
+  transport failures or 429s. All counters and the client ledger reconciled;
+  127 live snapshots passed. Main stampede: 182.645 seconds, about 110 requests/second.
+- Same revision: [strict burst](evidence/northflank-strict.txt) **FAIL**,
+  20,000 concurrent attempts, retries disabled, peak 20,001 including a state poll.
+  Across 23,034 reservation attempts, **410 HTTP 503s**, zero transport failures and
+  zero 429s. All 410 lacked the ingress marker and reported `server: istio-envoy`;
+  exact provider failure cause is not proven. State, client ledger and business
+  counters reconciled. Main stampede: 188.376 seconds. These errors remain failures.
+- Revision `6923616` makes HAProxy's buffer size and pool limit configurable.
+  The failed experiment used HTTP/2 upstream, with 16 KB buffers and an 8,192-buffer
+  limit (approximately 128 MiB plus overhead). The default HTTP/1.1 settings remain
+  unchanged. A 4 KB buffer reproduced HTTP/2 framing failures locally;
+  [protocol checks](evidence/northflank-http2-protocol.json) verify readiness, a new
+  reservation and identical idempotent replay over both protocols with the fix.
+- [Redeployment persistence](evidence/northflank-redeploy-persistence.txt): **PASS**.
+  The original reservation and key survived deployment to `6923616`; replay was
+  identical and seat counts remained reconciled.
+- [Public HTTP/2 strict experiment](evidence/northflank-h2-strict-aborted.txt):
+  **FAILED AND ABORTED** at `6923616`, run `2je1nh`. Gateway 503s occurred and
+  readiness stalled. Direct container liveness timed out after 3, 5 and 10 seconds;
+  the platform probe reported 0/1 passing. Container memory events showed no OOM.
+  No final totals or reconciliation are claimed for this incomplete run.
+- [Uncapped local HTTP/2 diagnostic](evidence/northflank-h2-memory-diagnostic.txt):
+  **FAIL**, the 512 MiB / 0.2 CPU container was OOM-killed during 20,000 requests.
+  This was a focused HTTP/2 capacity diagnostic, not the complete burst verifier.
+  It was not deployed publicly. The supported configuration returns to HTTP/1.1
+  upstream with 4 KB buffers and no hard buffer-count cap.
+- [HTTP/2 experiment log recording](evidence/northflank-h2-live-logs.mp4):
+  20 seconds at one frame per second during run `2je1nh`, showing actual structured
+  request IDs, reservations and declines. It does not establish a passing run.
+- [Rollback and application restart](evidence/northflank-configuration-recovery.json):
+  readiness and liveness **UP**, with the original reservation and identical
+  [idempotent replay preserved](evidence/northflank-restored-persistence.txt).
+  This is restart recovery, not an idle-wake measurement. No reliable duration
+  is claimed because the initial local Python timing probe lacked trusted CA roots;
+  the final checks used curl with normal certificate verification.
+- Both public load clients use Java 21.0.8 on macOS with `JAVA_TOOL_OPTIONS=-Xmx2g`.
+  HTTP/2 compatibility checks alone do not establish the strict capacity gate.
+- [Deployment reproduction](deploy/northflank.md) documents the exact free resources
+  and protocol settings. Earlier Render results below are retained as history.
+
 ## Application regression suite
 
 - Commit: `f69bded` (`fix: use active database for readiness and reject decimal money`).
@@ -25,7 +75,7 @@ No local result establishes public capacity.
 - Strict settings override attempts to lower concurrency or enable overload retries.
 - Every reservation attempt, including a 429 preceding a successful retry, remains counted.
 
-## Deployment
+## Earlier Render deployment
 
 - Public repository: https://github.com/siddikgitt/paytm-seat-reservation (original incremental history preserved).
 - Service: https://seat-reservation-t3ml.onrender.com
@@ -117,7 +167,7 @@ Failed iterations are retained rather than relabeled as passing results.
   amount, user, seats, and idempotency key survived; replay returned the identical HTTP 200 response with
   `Idempotent-Replayed: true`. Counts remained one available and one confirmed out of two seats.
 
-## Submission decision
+## Earlier Render submission decision
 
 **Do not submit as a completed assignment.** Code regressions, Docker startup, log evidence, restart persistence,
 and explicit cold-start recovery are verified. The repaired free public deployment passes the functional gate but still fails the required strict load gate. The strict result cannot be replaced by the smaller local or functional runs.

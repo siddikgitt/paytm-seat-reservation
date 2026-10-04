@@ -220,6 +220,22 @@ a regression fixture proves the timeout without accepting or retrying that failu
 reliability fix, not evidence that the hosting gate passed. The diagnostic public run was incomplete and
 is explicitly marked aborted. The previous complete failures are retained.
 
+### Alternative free hosting investigation
+
+After the Render failures, I asked Codex to try other free hosting. Northflank's free
+Sandbox was provisioned after I completed onboarding, card verification and GitHub
+access approval. Both the application and PostgreSQL use 0.2 shared vCPU / 512 MB.
+The public functional run passed with zero 5xx or transport failures and full
+reconciliation. The strict run still returned 410 gateway 503s, although state and
+business counters reconciled. No strict-load pass is claimed.
+
+Codex also diagnosed the 16 KB minimum buffer requirement for HTTP/2, implemented
+configurable HAProxy buffers, and tested the change. A capped buffer pool stalled
+under public strict load; an uncapped local HTTP/2 experiment was OOM-killed at
+512 MiB. The HTTP/1.1 upstream configuration remains the supported free deployment.
+These experiments distinguish functional correctness from insufficient demonstrated
+public capacity. Exact results and evidence are retained in VERIFICATION.md.
+
 ## 7. Possible extensions
 
 1. TTL holds with confirm and payment as described in section 3, including lazy expiry in the claim predicate and

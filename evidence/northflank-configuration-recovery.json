@@ -1,0 +1,31 @@
+{
+  "commit": "6923616",
+  "test": "Readiness and liveness after configuration rollback and application restart",
+  "configuration": "HTTP/1.1 upstream, buffer size 4096, buffer limit 0",
+  "results": {
+    "/readyz": {
+      "status": "UP",
+      "components": {
+        "database": {
+          "status": "UP",
+          "details": {
+            "latency_ms": 99
+          }
+        },
+        "readinessState": {
+          "status": "UP"
+        }
+      }
+    },
+    "/livez": {
+      "status": "UP",
+      "components": {
+        "livenessState": {
+          "status": "UP"
+        }
+      }
+    }
+  },
+  "timing": "No reliable recovery-duration measurement: the first local Python monitor lacked a trusted CA bundle. Verified with curl using normal certificate validation.",
+  "scope": "Application restart, not idle wake or explicit suspend/resume"
+}
