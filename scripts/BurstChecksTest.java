@@ -6,7 +6,7 @@ import java.util.Map;
 public class BurstChecksTest {
     static int checks;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         Burst.warmingUp = false;
         Burst.Stats observed = new Burst.Stats("test");
         observed.add(response(201, null, false));
@@ -54,7 +54,37 @@ public class BurstChecksTest {
             throw new AssertionError("diagnostics leaked sensitive headers");
         }
         checks += 2;
+        stalledBodyDeadline();
         System.out.println("PASS: " + checks + " burst verifier checks; strict=" + Burst.strict);
+    }
+
+    static void stalledBodyDeadline() throws Exception {
+        var release = new java.util.concurrent.CountDownLatch(1);
+        try (var server = new java.net.ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress());
+             var client = java.net.http.HttpClient.newHttpClient()) {
+            Thread peer = Thread.ofVirtual().start(() -> {
+                try (var socket = server.accept()) {
+                    var reader = new java.io.BufferedReader(new java.io.InputStreamReader(socket.getInputStream()));
+                    for (String line; (line = reader.readLine()) != null && !line.isEmpty();) { }
+                    socket.getOutputStream().write("HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nx".getBytes());
+                    socket.getOutputStream().flush();
+                    release.await(2, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (Exception e) { throw new RuntimeException(e); }
+            });
+            long start = System.nanoTime();
+            try {
+                Burst.sendComplete(client, java.net.http.HttpRequest.newBuilder(
+                        java.net.URI.create("http://localhost:" + server.getLocalPort()))
+                        .timeout(java.time.Duration.ofMillis(200)).build());
+                throw new AssertionError("partial body was treated as complete");
+            } catch (java.net.http.HttpTimeoutException expected) {
+                if ((System.nanoTime() - start) / 1_000_000 > 1500) throw new AssertionError("body deadline not enforced");
+            } finally {
+                release.countDown();
+                peer.join();
+            }
+        }
+        checks++;
     }
 
     static Burst.Res response(int status, String reason, boolean replayed) {

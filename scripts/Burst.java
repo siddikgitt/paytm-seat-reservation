@@ -603,7 +603,7 @@ public class Burst {
                 HttpClient client = Clients.slots.take();
                 HttpResponse<String> resp;
                 try {
-                    resp = client.send(b.build(), HttpResponse.BodyHandlers.ofString());
+                    resp = sendComplete(client, b.build());
                 } finally {
                     Clients.slots.add(client);
                 }
@@ -631,6 +631,22 @@ public class Burst {
             String detail = e instanceof java.io.IOException && "too many concurrent streams".equals(e.getMessage())
                     ? ":too_many_concurrent_streams" : "";
             return new Res(0, e.toString(), "transport:" + e.getClass().getSimpleName() + detail, (System.nanoTime() - start) / 1000, false);
+        }
+    }
+
+    // JDK 21's request timeout can stop at response headers. Bound the body too,
+    // and cancel the exchange on timeout so a partial upstream reply cannot hang grading.
+    static HttpResponse<String> sendComplete(HttpClient client, HttpRequest request) throws Exception {
+        var pending = client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
+        try {
+            return pending.get(request.timeout().orElseThrow().toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            throw new java.net.http.HttpTimeoutException("complete response deadline exceeded");
+        } catch (java.util.concurrent.ExecutionException e) {
+            if (e.getCause() instanceof Exception cause) throw cause;
+            throw e;
+        } finally {
+            if (!pending.isDone()) pending.cancel(true);
         }
     }
 
