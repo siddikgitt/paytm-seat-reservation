@@ -128,3 +128,21 @@ ignored local `private-submission/` directory; no email was sent.
 
 The previous README's claimed startup and throughput measurements had no retained evidence in this checkout
 and were removed rather than presented as verified results.
+
+## Follow-up investigation (in progress)
+
+The user requested another repair pass after the initial failed submission gate.
+The Docker image now queues requests in HAProxy before allocating Spring request state, isolates health/read
+connection capacity from writes, and aligns keep-alive timeouts with Render's proxy. SQL, endpoints, tokens,
+quota enforcement, and idempotency semantics are unchanged.
+
+- Application regression suite after the configuration change: **12 passed**, no failures/errors.
+- Database outage through the proxy: readiness **503 in 2.10 seconds**, liveness **200**, then readiness recovered.
+- Prototype with 180-second queue, C1 JVM, combined **512 MB / 0.1 CPU**: FAIL, 8,267 queue-expiry HTTP 503s.
+  State and counters reconciled, no OOM; kernel peak memory 459,857,920 bytes (438.55 MiB).
+  External monitoring saw two failed health probes out of 76.
+- Same prototype with full tiered compilation: FAIL, 13,520 queue-expiry HTTP 503s.
+  State/counters reconciled; sampled peak 465.6 MiB; seven failed health probes out of 99.
+  Cold startup increased from about 34 to about 98 seconds, so C1 was retained.
+- Revised queue deadline: 480 seconds, within the existing strict client deadline; no retries added.
+  Final constrained and public verification: running. These prototypes are not passing capacity evidence.

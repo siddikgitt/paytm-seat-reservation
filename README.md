@@ -234,13 +234,42 @@ Plan notes:
 The app reads `DATABASE_URL` in Render/Heroku form (`postgres://user:pass@host[:port]/db`), so it also runs
 unchanged on Railway, Fly or Neon.
 
+### Bounded ingress in the Docker image
+
+The container runs HAProxy in front of the same Spring service. Up to 24,000 client connections can wait
+at ingress, while at most 64 write requests enter Spring at once. Health/metrics and GET/HEAD requests use
+separate upstream capacity, so reservation queues do not consume their connection slots. All requests still
+use the existing authentication, application handlers, and PostgreSQL transactions; the proxy never invents
+reservation outcomes and does not retry requests.
+
+Waiting writes have a bounded 480-second queue deadline, plus a 60-second upstream response timeout.
+The strict client retains its 600-second deadline. This is a latency tradeoff for a fractional-CPU host,
+not a reduction of the 20,000-attempt client concurrency. Frontend and application keep-alive timeouts are
+120 seconds to avoid closing reusable connections before Render's proxy expects them to close.
+
+Java and HAProxy share the container's memory/CPU budget. The JVM heap is capped at 35% of container memory;
+HAProxy uses 4 KB HTTP/1.1 buffers, which also bound request-header size. Normal issued-token/admin headers
+fit this bound; bodies (including large show creation and show-state responses) stream through the proxy.
+Render continues to terminate public TLS/HTTP2. Spring binds only to loopback port 18080 in Docker.
+`deploy/start.sh` terminates both processes if either exits, and forwards container shutdown to both.
+
+For the constrained local configuration:
+
+```bash
+docker compose -p paytm-stress -f docker-compose.yml -f deploy/compose.stress.yml up --build -d
+# Java + proxy share 512 MB and 0.1 CPU; PostgreSQL is a separate container.
+docker run --rm --network paytm-stress_default --memory=2g -e STRICT=true \
+  -v "$PWD/scripts:/scripts:ro" eclipse-temurin:21-jdk \
+  java -Xmx1536m -Xss512k -XX:+UseParallelGC /scripts/Burst.java http://app:8080
+```
+
 ## Configuration
 
 | Env | Default | |
 |---|---|---|
 | `DATABASE_URL` | (none) | `postgres://...`; otherwise `SPRING_DATASOURCE_URL/USERNAME/PASSWORD` |
 | `DB_SSLMODE` | `prefer` | used when `DATABASE_URL` has no query string |
-| `HTTP_MAX_CONNECTIONS` | 2048 | bounds per-connection memory; remaining connections queue upstream |
+| `HTTP_MAX_CONNECTIONS` | 2048 | internal Tomcat bound; Docker ingress handles the large waiting queue |
 | `HTTP_ACCEPT_COUNT` | 20000 | requested OS connection backlog (subject to host limits) |
 | `DB_POOL_SIZE` | 20 | Hikari max pool |
 | `DB_CONNECTION_TIMEOUT_MS` | 30000 | pool borrow wait |
@@ -248,7 +277,8 @@ unchanged on Railway, Fly or Neon.
 | `ADMISSION_MAX_WAIT` | 25s | queue time before `429` |
 | `JWT_SECRET` | dev value | HS256 key material |
 | `ADMIN_API_KEY` | `dev-admin-key` | admin secret |
-| `PORT` | 8080 | |
+| `PORT` | 8080 | public container listener |
+| `APP_PORT` | 18080 | loopback Spring listener inside Docker |
 | `JAVA_TOOL_OPTIONS` | see Dockerfile | C1-only JIT and AppCDS for small CPU shares; drop `-XX:TieredStopAtLevel=1` on bigger plans |
 
 ## Tests

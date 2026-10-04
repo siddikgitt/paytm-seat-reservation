@@ -9,18 +9,22 @@ RUN --mount=type=cache,target=/root/.m2 mvn -B -q -DskipTests package \
     && java -Djarmode=tools -jar target/app.jar extract --destination /app
 
 FROM eclipse-temurin:21-jre
-RUN groupadd --system app && useradd --system --gid app app
+RUN apt-get update && apt-get install -y --no-install-recommends haproxy tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system app && useradd --system --gid app app
 WORKDIR /app
 COPY --from=build /app/ ./
+COPY deploy/haproxy.cfg deploy/start.sh /app/
+RUN chmod 755 /app/start.sh
 # AppCDS training run: start the context without a database (Flyway off, Hikari connects lazily),
 # exit after refresh and dump the loaded classes for reuse at runtime.
 RUN java -XX:ArchiveClassesAtExit=/app/app.jsa -Dspring.context.exit=onRefresh \
         -Dspring.flyway.enabled=false -Dspring.main.banner-mode=off -Dlogging.level.root=WARN \
         -jar app.jar || true
 USER app
-# C1-only JIT (TieredStopAtLevel=1) bounds compilation work on the small free instance.
-# Startup and throughput measurements are recorded in VERIFICATION.md.
+# C1 keeps startup/first-burst compilation affordable on fractional CPU.
+# Reserve memory for the ingress queue in the same container.
 ENV PORT=8080 \
-    JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=55 -XX:MaxMetaspaceSize=128m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError -Xss512k -XX:TieredStopAtLevel=1 -XX:SharedArchiveFile=/app/app.jsa -Xlog:cds=off -Xlog:cds+dynamic=off"
+    JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=35 -XX:MaxMetaspaceSize=128m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError -Xss512k -XX:TieredStopAtLevel=1 -XX:SharedArchiveFile=/app/app.jsa -Xlog:cds=off -Xlog:cds+dynamic=off"
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/app/start.sh"]

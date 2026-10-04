@@ -177,6 +177,25 @@ is independent of the pool; the HTTP request still shares the server's connector
 can delay the platform's health probe even when Postgres is reachable. This is a remaining availability and
 capacity limitation, not something the idempotency key or SQL locks solve. No paid capacity was used.
 
+### Follow-up: queue before servlet allocation
+
+The follow-up diagnosis separated intermittent connection reuse failures from overload. The application had a
+two-second keep-alive timeout, shorter than the platform proxy's reuse window. The revised Docker image uses
+120-second keep-alive on both listeners and puts HAProxy before Spring. HAProxy accepts up to 24,000 client
+connections but only forwards 64 writes concurrently, with separate small pools for health/metrics and reads.
+This bounds servlet/JDBC memory while preserving all transaction, identity, quota, and idempotency decisions.
+No reservation response is synthesized, and the proxy performs no retries.
+
+Queued requests can wait up to 480 seconds on the fractional-CPU instance. Queue plus backend deadlines stay
+below the strict load client's 600-second deadline. This explicitly trades latency for completing the same
+20,000 concurrent attempts. The revised image gives the JVM 35% of container memory so the ingress queue can
+share the same 512 MB limit. Both processes stop if either dies; readiness still queries the real database.
+
+A local comparison at 512 MB / 0.1 CPU found normal tiered compilation slower on the first burst and more
+memory-hungry than the C1 setting, so C1 was retained. The short 180-second prototype queue expired requests;
+those failed results are retained. The final longer-queue configuration must pass the public test before the
+submission status changes. Codex designed and implemented this follow-up; it is part of the AI-led work.
+
 ## 7. Possible extensions
 
 1. TTL holds with confirm and payment as described in section 3, including lazy expiry in the claim predicate and

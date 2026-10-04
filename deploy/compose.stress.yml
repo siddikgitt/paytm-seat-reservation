@@ -1,0 +1,8 @@
+# Local capacity check: Java and HAProxy share the same cgroup budget.
+# docker compose -p paytm-stress -f docker-compose.yml -f deploy/compose.stress.yml up --build -d
+services:
+  app:
+    mem_limit: 512m
+    cpus: 0.1
+  db:
+    image: postgres:18-alpine
