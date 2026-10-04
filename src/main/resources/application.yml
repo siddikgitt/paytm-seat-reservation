@@ -29,6 +29,8 @@ spring:
   jackson:
     property-naming-strategy: SNAKE_CASE
     default-property-inclusion: non_null
+    deserialization:
+      accept-float-as-int: false
   lifecycle:
     timeout-per-shutdown-phase: 20s
 

@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
+import org.springframework.boot.autoconfigure.jdbc.JdbcConnectionDetails;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,13 +23,13 @@ public class DatabaseHealthIndicator implements HealthIndicator {
 
     private static final long CACHE_MS = 1000;
 
-    private final DataSourceProperties ds;
+    private final JdbcConnectionDetails ds;
     private final AtomicReference<Cached> last = new AtomicReference<>();
 
     private record Cached(Health health, long atMillis) {
     }
 
-    public DatabaseHealthIndicator(DataSourceProperties ds) {
+    public DatabaseHealthIndicator(JdbcConnectionDetails ds) {
         this.ds = ds;
     }
 
@@ -47,15 +47,17 @@ public class DatabaseHealthIndicator implements HealthIndicator {
 
     private Health check() {
         Properties p = new Properties();
-        p.setProperty("user", ds.determineUsername());
-        if (ds.determinePassword() != null) {
-            p.setProperty("password", ds.determinePassword());
+        if (ds.getUsername() != null) {
+            p.setProperty("user", ds.getUsername());
+        }
+        if (ds.getPassword() != null) {
+            p.setProperty("password", ds.getPassword());
         }
         p.setProperty("connectTimeout", "2");
         p.setProperty("socketTimeout", "2");
         p.setProperty("loginTimeout", "2");
         long start = System.nanoTime();
-        try (Connection c = DriverManager.getConnection(ds.determineUrl(), p);
+        try (Connection c = DriverManager.getConnection(ds.getJdbcUrl(), p);
              Statement st = c.createStatement()) {
             st.setQueryTimeout(2);
             try (ResultSet rs = st.executeQuery("SELECT 1")) {

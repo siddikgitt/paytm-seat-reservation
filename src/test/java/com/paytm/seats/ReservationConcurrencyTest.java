@@ -256,6 +256,45 @@ class ReservationConcurrencyTest {
     }
 
     @Test
+    void fractionalPricesAndLimitsAreRejectedWithoutCreatingShows() {
+        Integer before = jdbc.queryForObject("SELECT count(*) FROM shows", Integer.class);
+        for (Number price : List.of(25000.75, 25000.0)) {
+            Response r = api.post("/shows", null,
+                    Map.of("name", "decimal", "seats", List.of("A1"), "price_paise", price),
+                    Map.of("X-Admin-Key", "dev-admin-key"));
+            assertThat(r.status()).isEqualTo(400);
+        }
+        Response limit = api.post("/shows", null,
+                Map.of("name", "decimal-limit", "seats", List.of("A1"), "price_paise", 25000, "per_user_limit", 4.5),
+                Map.of("X-Admin-Key", "dev-admin-key"));
+        assertThat(limit.status()).isEqualTo(400);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM shows", Integer.class)).isEqualTo(before);
+    }
+
+    @Test
+    void readinessUsesActiveDatabaseAndRecoversAfterAnOutage() throws Exception {
+        assertThat(api.get("/readyz", null).status()).isEqualTo(200);
+        // Pause only this test's disposable database. Existing pooled sockets stay open,
+        // so this also proves that readiness performs a real query with a bounded timeout.
+        postgres.getDockerClient().pauseContainerCmd(postgres.getContainerId()).exec();
+        try {
+            Thread.sleep(1100); // expire the health indicator's one-second cache
+            long start = System.nanoTime();
+            assertThat(api.get("/readyz", null).status()).isEqualTo(503);
+            assertThat((System.nanoTime() - start) / 1_000_000).isLessThan(6000);
+            assertThat(api.get("/livez", null).status()).isEqualTo(200);
+        } finally {
+            postgres.getDockerClient().unpauseContainerCmd(postgres.getContainerId()).exec();
+        }
+        long deadline = System.nanoTime() + java.time.Duration.ofSeconds(10).toNanos();
+        while (api.get("/readyz", null).status() != 200 && System.nanoTime() < deadline) {
+            Thread.sleep(200);
+        }
+        assertThat(api.get("/readyz", null).status()).isEqualTo(200);
+        assertReconciled(api.createShow(seats(3), 25000, 4).get("id").asText());
+    }
+
+    @Test
     void validationAndAuthAreCleanFourHundreds() {
         String showId = api.createShow(seats(3), 100, 4).get("id").asText();
         String t = api.token("val");
