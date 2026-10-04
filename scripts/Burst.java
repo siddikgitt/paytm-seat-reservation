@@ -83,7 +83,7 @@ public class Burst {
         String outcome() {
             if (status == 201) return "201 confirmed";
             if (status == 200) return replayed ? "200 idempotent replay" : "200 ok";
-            if (status == 0) return "transport error";
+            if (status == 0) return "transport error " + reason;
             if (status >= 500) return status + " SERVER ERROR";
             return status + " " + (reason == null ? "" : reason);
         }
