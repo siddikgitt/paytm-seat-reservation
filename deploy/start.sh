@@ -3,6 +3,8 @@ set -euo pipefail
 
 export PORT="${PORT:-8080}"
 export APP_PORT="${APP_PORT:-18080}"
+export HAPROXY_BUFFER_SIZE="${HAPROXY_BUFFER_SIZE:-4096}"
+export HAPROXY_BUFFER_LIMIT="${HAPROXY_BUFFER_LIMIT:-0}"
 
 java -jar /app/app.jar --server.port="$APP_PORT" --server.address=127.0.0.1 &
 app_pid=$!

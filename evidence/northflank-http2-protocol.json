@@ -1,0 +1,12 @@
+{
+  "original_buffer_bytes": 4096,
+  "original_h2_result": "curl exit 16: Error in the HTTP2 framing layer",
+  "updated_buffer_bytes": 16384,
+  "buffer_pool_limit": 8192,
+  "local_app_memory_limit_mib": 512,
+  "local_app_cpu_limit": 0.2,
+  "http_1_1": "PASS readiness 200, reservation 201, identical replay 200",
+  "http_2_prior_knowledge": "PASS readiness 200, reservation 201, identical replay 200",
+  "public_trial_before_fix": "HTTP 502 protocol error; reverted to HTTP/1.1 before change",
+  "capacity": "Not established by this protocol smoke test"
+}
